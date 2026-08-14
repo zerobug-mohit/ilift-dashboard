@@ -104,11 +104,28 @@ buys you convenient distribution of the *interface*, not shared access to
 *numbers*. For genuine team access the backend has to run somewhere both people
 can reach, which is a different deployment and a data-governance decision.
 
-**Browser support.** A page on HTTPS calling `http://127.0.0.1` is normally
-blocked as mixed content, but `localhost` and `127.0.0.1` are exempt from that
-rule and **Chrome and Edge honour the exemption**. Firefox and Safari are
-stricter and may block it. Use Chrome or Edge, or run the dashboard locally
-(`npm run dev`), where the question doesn't arise.
+**You must allow local network access, once.** Chrome now blocks a public
+HTTPS site from reaching a loopback address until you permit it. The first time
+you open the Pages URL with the backend running, Chrome asks whether the site
+may access devices on your local network — click **Allow**. Until you do, the
+dashboard reports that it cannot reach the backend, and the browser console
+shows:
+
+```
+blocked by CORS policy: Permission was denied for this request
+to access the `loopback` address space
+```
+
+This is a browser policy, not a bug in the dashboard, and no server header can
+override it — the backend already sends `Access-Control-Allow-Private-Network`,
+which older Chrome accepted but current Chrome does not treat as sufficient.
+Verified: blocked by default, works once the permission is granted.
+
+Because Chrome has tightened this rule twice already and may tighten it again,
+**the local route is the more durable one**: `npm run dev` and open
+<http://localhost:5173>, where the question never arises. Treat Pages as a
+convenience for distributing the interface, not as the primary way to run the
+dashboard day to day.
 
 **Private repos.** GitHub Pages on a private repo needs a paid plan. The
 frontend contains no data, so a separate public repo for it is a reasonable

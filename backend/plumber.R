@@ -97,7 +97,14 @@ function(req, res) {
   res$setHeader("Access-Control-Allow-Headers", "Content-Type")
   res$setHeader("Access-Control-Max-Age", "600")
 
+  # Private / Local Network Access.
+  # Chrome blocks requests from a public origin (an https:// site) to a loopback
+  # address unless the target opts in. Under the older Private Network Access
+  # design this header is the opt-in; newer Chrome additionally requires the
+  # user to grant a permission prompt, which no header can satisfy.
+  # Harmless where unsupported, and required where it is.
   if (identical(req$REQUEST_METHOD, "OPTIONS")) {
+    res$setHeader("Access-Control-Allow-Private-Network", "true")
     res$status <- 200
     return(list())
   }
