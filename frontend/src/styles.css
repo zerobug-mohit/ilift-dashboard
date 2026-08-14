@@ -1,0 +1,198 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   Design tokens and component styles carried over verbatim from the existing
+   dashboard (build_v3.py CSS block), so the rebuild is visually continuous
+   with the version the team already reviewed and approved.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --navy:#1F4E79; --blue:#2E75B6; --lblue:#BDD7EE; --vlblue:#EBF3FB;
+  --org:#C55A11;  --lorg:#F4B183; --llorg:#FCE4D6;
+  --grn:#375623;  --lgrn:#A9D18E; --vlgrn:#E2EFDA;
+  --prp:#7030A0;  --lprp:#E2CFEE; --tel:#00B050;
+  --grey:#595959; --bg:#F4F6FA;   --bdr:#D6D6D6;
+  --red:#C00000;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: #333;
+  font-size: 13px;
+}
+
+header {
+  background: var(--navy); color: #fff; padding: 14px 28px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+header h1 { font-size: 18px; font-weight: 700; }
+header .sub { font-size: 11px; opacity: .75; margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.badge {
+  background: var(--blue); padding: 5px 14px; border-radius: 20px; font-size: 11px;
+  white-space: nowrap;
+}
+.badge.stale { background: var(--org); }
+
+/* ── Filter bar ─────────────────────────────────────────────────────────── */
+.filter-bar {
+  background: #fff; border-bottom: 2px solid var(--lblue);
+  padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  flex-wrap: wrap; box-shadow: 0 2px 5px rgba(0,0,0,.06);
+}
+.filter-bar label { font-size: 11px; font-weight: 700; color: var(--navy); }
+.filter-bar input[type=month], .filter-bar select {
+  border: 1.5px solid var(--blue); border-radius: 4px; padding: 5px 9px;
+  font-size: 11px; color: var(--navy); font-family: Arial; outline: none; background: #fff;
+}
+.btn-r {
+  background: var(--navy); color: #fff; border: none; padding: 5px 14px;
+  border-radius: 4px; font-size: 11px; cursor: pointer; font-family: Arial;
+}
+.btn-r:hover { background: var(--blue); }
+.btn-r:disabled { opacity: .55; cursor: default; }
+.fstat { font-size: 11px; color: var(--grey); margin-left: auto; }
+
+/* ── Tabs ───────────────────────────────────────────────────────────────── */
+.main-tabs {
+  display: flex; background: #fff; border-bottom: 3px solid var(--navy);
+  padding: 0 28px; overflow-x: auto;
+}
+.mt {
+  padding: 11px 20px; font-size: 13px; font-weight: 700; border: none;
+  background: none; cursor: pointer; color: var(--grey);
+  border-bottom: 4px solid transparent; margin-bottom: -3px;
+  font-family: Arial; white-space: nowrap;
+}
+.mt.on { color: var(--navy); border-bottom-color: var(--navy); }
+.mt:hover { color: var(--navy); }
+
+.sub-tabs {
+  display: flex; background: var(--vlblue); border-bottom: 2px solid var(--lblue);
+  padding: 0 28px; overflow-x: auto;
+}
+.st {
+  padding: 8px 16px; font-size: 12px; font-weight: 600; border: none;
+  background: none; cursor: pointer; color: var(--grey);
+  border-bottom: 3px solid transparent; margin-bottom: -2px;
+  font-family: Arial; white-space: nowrap;
+}
+.st.on { color: var(--blue); border-bottom-color: var(--blue); }
+.st:hover { color: var(--blue); }
+
+.main { max-width: 1380px; margin: 0 auto; padding: 18px 22px 40px; }
+
+/* ── KPI tiles ──────────────────────────────────────────────────────────── */
+.kg {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.kc {
+  background: #fff; border-radius: 7px; padding: 13px 15px;
+  border-left: 5px solid var(--blue); box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+.kc.o { border-left-color: var(--org); }
+.kc.g { border-left-color: var(--grn); }
+.kc.p { border-left-color: var(--prp); }
+.kc.t { border-left-color: var(--tel); }
+.kl {
+  font-size: 10px; color: var(--grey); text-transform: uppercase;
+  letter-spacing: .4px; margin-bottom: 4px;
+}
+.kv { font-size: 24px; font-weight: 700; color: var(--navy); line-height: 1; }
+.ks { font-size: 10px; color: var(--grey); margin-top: 3px; }
+
+/* ── Sections ───────────────────────────────────────────────────────────── */
+.sec { margin-bottom: 20px; }
+.sh {
+  font-size: 12px; font-weight: 700; color: #fff; padding: 7px 14px;
+  border-radius: 5px 5px 0 0;
+}
+.sh.b { background: var(--blue); } .sh.o { background: var(--org); }
+.sh.g { background: var(--grn); }  .sh.n { background: var(--navy); }
+.sh.t { background: var(--tel); }  .sh.p { background: var(--prp); }
+.sh-row { display: flex; align-items: center; justify-content: space-between; padding-right: 8px; gap: 8px; }
+
+.cg { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.cg.one { grid-template-columns: 1fr; }
+.cg.three { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 900px) { .cg, .cg.three { grid-template-columns: 1fr; } }
+
+.cc {
+  background: #fff; padding: 14px; border-radius: 0 8px 8px 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07); height: 270px; position: relative;
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+.tw {
+  overflow-x: auto; background: #fff; border-radius: 0 0 7px 7px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+thead th {
+  background: var(--navy); color: #fff; text-align: center; padding: 8px 9px;
+  white-space: nowrap; font-weight: 600; position: sticky; top: 0;
+}
+thead th.toth { background: #2c6fad; }
+tbody tr:nth-child(even) { background: #F7FAFD; }
+tbody tr:hover { background: var(--vlblue); }
+tbody td { padding: 6px 9px; border-bottom: 1px solid var(--bdr); }
+.ind { color: #333; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tot { background: var(--vlblue); font-weight: 700; text-align: right; }
+.sl { font-weight: 700; text-align: center; vertical-align: middle; font-size: 10.5px; }
+.sl.b { background: var(--lblue); color: var(--navy); }
+.sl.o { background: var(--llorg); color: var(--org); }
+.sl.g { background: var(--vlgrn); color: var(--grn); }
+.sl.p { background: var(--lprp); color: var(--prp); }
+.cas-sub td { background: var(--vlgrn) !important; font-weight: 700; }
+.cas-tot td { background: var(--navy) !important; color: #fff !important; font-weight: 700; }
+
+/* ── Buttons / chips ────────────────────────────────────────────────────── */
+.dl-btn {
+  background: #fff; color: var(--navy); border: 1.5px solid var(--navy);
+  padding: 3px 10px; border-radius: 4px; font-size: 10px; cursor: pointer;
+  font-family: Arial; font-weight: 700; white-space: nowrap;
+}
+.dl-btn:hover { background: var(--navy); color: #fff; }
+
+.chip {
+  border: 1.5px solid var(--blue); background: #fff; color: var(--navy);
+  border-radius: 14px; padding: 4px 12px; font-size: 11px; cursor: pointer;
+  font-family: Arial; font-weight: 600;
+}
+.chip.on { background: var(--blue); color: #fff; }
+
+.chip-bar {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px;
+  background: #fff; border-bottom: 1px solid var(--bdr);
+}
+
+.note {
+  margin: 8px 14px 4px; padding: 8px 12px; background: #f5f5f5;
+  border: 1px solid #ddd; border-radius: 6px; font-size: 11px;
+  color: #555; line-height: 1.7;
+}
+
+/* ── States ─────────────────────────────────────────────────────────────── */
+.state {
+  background: #fff; border-radius: 8px; padding: 40px 28px; text-align: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07); margin: 24px auto; max-width: 720px;
+}
+.state h2 { font-size: 15px; color: var(--navy); margin-bottom: 10px; }
+.state p  { font-size: 12px; color: var(--grey); line-height: 1.8; }
+.state code {
+  background: var(--vlblue); padding: 2px 6px; border-radius: 3px;
+  font-size: 11px; color: var(--navy);
+}
+.state.error { border-left: 5px solid var(--red); text-align: left; }
+
+.banner {
+  background: var(--llorg); border-left: 4px solid var(--org);
+  padding: 9px 14px; font-size: 11px; color: #7a3708; line-height: 1.7;
+}
+.banner strong { color: var(--org); }
+
+footer { text-align: center; padding: 16px; font-size: 10px; color: #aaa; }
+footer .prov { color: var(--grey); }

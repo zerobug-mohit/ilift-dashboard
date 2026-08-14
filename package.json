@@ -1,0 +1,19 @@
+{
+  "name": "ilift-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "description": "iLIFT programme dashboard — Vite frontend over a Plumber (R) API",
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "node scripts/run-r.mjs backend/scripts/serve.R",
+    "dev:web": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "test": "node scripts/run-r.mjs backend/scripts/test.R",
+    "typecheck": "npm --prefix frontend run typecheck",
+    "fixtures": "node scripts/run-r.mjs backend/scripts/make_fixtures.R",
+    "smoke": "node scripts/run-r.mjs backend/scripts/smoke.R"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

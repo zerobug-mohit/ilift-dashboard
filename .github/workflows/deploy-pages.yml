@@ -1,0 +1,75 @@
+name: Deploy dashboard to GitHub Pages
+
+# Publishes the frontend only. The backend is NOT deployed — it runs on each
+# viewer's own machine, and the programme data never leaves it.
+#
+# Before this works, enable Pages for the repo:
+#   Settings → Pages → Build and deployment → Source: "GitHub Actions"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type check
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: frontend
+        env:
+          # Project sites are served from https://<user>.github.io/<repo>/
+          VITE_BASE: /${{ github.event.repository.name }}/
+          # The API the published page talks to: the viewer's own machine.
+          # Overridable in the UI (Data → Backend connection) without rebuilding.
+          VITE_API_BASE: ${{ vars.ILIFT_API_BASE || 'http://127.0.0.1:8000' }}
+        run: npm run build
+
+      - name: SPA fallback
+        # Pages has no rewrite rules; copying index.html to 404.html keeps deep
+        # links working when someone reloads on a filtered URL.
+        run: cp frontend/dist/index.html frontend/dist/404.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

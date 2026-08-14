@@ -1,0 +1,41 @@
+# Data — never commit programme data. These are patient screening records.
+# Ignore the contents but keep the folders, so a fresh clone has somewhere to
+# put exports. (A bare `backend/data/incoming/` would exclude the directory
+# itself, and then the !.gitkeep negation below could never match.)
+backend/data/incoming/*
+backend/data/cache/*
+!backend/data/incoming/.gitkeep
+!backend/data/incoming/nikshay/
+backend/data/incoming/nikshay/*
+!backend/data/incoming/nikshay/.gitkeep
+*.xlsx
+*.xls
+
+# Clone of trishachandra22/ILIFT, kept locally as the reference for the port.
+# Not part of this project — excluded so it doesn't become a nested repo.
+repo/
+
+# Secrets
+.Renviron
+.env
+.env.local
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+
+# Node
+node_modules/
+dist/
+*.local
+.vite/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+frontend/tsconfig.tsbuildinfo

@@ -1,0 +1,12 @@
+# Copy to .Renviron (gitignored) and adjust. R reads it at startup.
+
+# Origins allowed to call the API, comma-separated.
+# localhost is always allowed. Add your GitHub Pages origin so the hosted
+# dashboard can talk to your local backend:
+ILIFT_ALLOWED_ORIGINS=https://zerobug-mohit.github.io
+
+# Optional overrides:
+# ILIFT_PORT=8000
+# ILIFT_DATA_DIR=backend/data
+# ILIFT_PROJECT_START=2025-07-28
+# ILIFT_MAX_UPLOAD_MB=150
