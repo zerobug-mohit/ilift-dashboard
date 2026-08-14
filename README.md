@@ -118,14 +118,18 @@ to access the `loopback` address space
 
 This is a browser policy, not a bug in the dashboard, and no server header can
 override it — the backend already sends `Access-Control-Allow-Private-Network`,
-which older Chrome accepted but current Chrome does not treat as sufficient.
-Verified: blocked by default, works once the permission is granted.
+which older Chrome accepted but current Chrome does not treat as sufficient on
+its own.
 
-Because Chrome has tightened this rule twice already and may tighten it again,
-**the local route is the more durable one**: `npm run dev` and open
-<http://localhost:5173>, where the question never arises. Treat Pages as a
-convenience for distributing the interface, not as the primary way to run the
-dashboard day to day.
+**Once the permission is granted, everything works**, verified end to end
+against the live Pages URL: reading data, uploading a new RIS export, and the
+KPIs and charts updating to match. Cross-origin refetches take a few seconds
+longer than they do locally, so the numbers settle a moment after the upload
+confirmation appears.
+
+Chrome has nonetheless tightened this rule twice, so if it ever breaks, the
+local route is unaffected: `npm run dev` and open <http://localhost:5173>, where
+the question never arises.
 
 **Private repos.** GitHub Pages on a private repo needs a paid plan. The
 frontend contains no data, so a separate public repo for it is a reasonable
