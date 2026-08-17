@@ -18,10 +18,12 @@ suppressPackageStartupMessages({
 # serve.R sets the working directory to backend/, so R/ resolves from there.
 source_dir <- if (dir.exists("R")) "R" else file.path("backend", "R")
 
-for (f in c("config.R", "schema.R", "ingest.R", "cache.R", "uploads.R",
+for (f in c("config.R", "schema.R", "ingest.R", "cache.R", "uploads.R", "auth.R",
             "metrics_core.R", "metrics_nns.R", "metrics_weekly.R")) {
   source(file.path(source_dir, f))
 }
+
+auth_startup_report()
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
 # Deliberately an allowlist, not "*".
@@ -111,6 +113,51 @@ function(req, res) {
   plumber::forward()
 }
 
+# ── Authentication ───────────────────────────────────────────────────────────
+# Runs after CORS so that a rejected request still carries the CORS headers and
+# the browser can read the 401 body — otherwise the dashboard cannot tell
+# "wrong password" from "server unreachable".
+#* @filter auth
+function(req, res) {
+  # Preflight carries no credentials by design; CORS already handled it.
+  if (identical(req$REQUEST_METHOD, "OPTIONS")) return(plumber::forward())
+
+  path <- req$PATH_INFO
+
+  # Static assets are public. They have to be: the login screen is part of the
+  # bundle, so protecting it would leave nobody able to reach the page that
+  # collects the password. The bundle carries no data — every figure comes from
+  # /api, which stays protected.
+  if (!startsWith(path, "/api/")) return(plumber::forward())
+
+  # Health is unauthenticated so uptime checks work without a secret.
+  if (identical(path, "/api/health")) return(plumber::forward())
+
+  level <- auth_level(req)
+
+  if (level == "anonymous") {
+    res$status <- 401
+    res$setHeader("WWW-Authenticate", "Bearer realm=\"iLIFT\"")
+    return(list(
+      error   = jsonlite::unbox("unauthorized"),
+      message = jsonlite::unbox("A password is required to view this dashboard.")
+    ))
+  }
+
+  if (is_write_path(path) && level != "admin") {
+    res$status <- 403
+    return(list(
+      error   = jsonlite::unbox("forbidden"),
+      message = jsonlite::unbox(
+        "Viewing is allowed, but changing the data is not. Uploading requires the admin token."
+      )
+    ))
+  }
+
+  req$auth_level <- level
+  plumber::forward()
+}
+
 # Wrap a handler so ingest failures return a structured 503 instead of a stack
 # trace — the UI renders this as "no data loaded yet" with the reason.
 with_data <- function(res, fn) {
@@ -136,7 +183,7 @@ function() {
 #* Dataset metadata: available months, source freshness, schema diagnostics
 #* @serializer unboxedJSON
 #* @get /api/meta
-function(res) {
+function(req, res) {
   with_data(res, function() {
     b <- get_bundle()
     list(
@@ -148,6 +195,8 @@ function(res) {
       beneficiaries = b$ris$n_bids,
       sources       = source_status(),
       cache         = cache_stats(),
+      # Lets the UI show upload controls only to whoever can actually use them
+      auth          = c(auth_status(), list(level = req$auth_level %||% "admin")),
       schema        = list(
         warnings  = b$ris$warnings,
         conflicts = b$ris$conflicts

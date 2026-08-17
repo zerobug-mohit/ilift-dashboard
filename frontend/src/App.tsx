@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useMeta, useRefresh } from './api/client'
+import { useMeta, useRefresh, AuthError } from './api/client'
+import { hasCredential } from './api/auth'
 import { useFilters } from './state/filters'
 import { FilterBar } from './components/FilterBar'
 import { NoData, LoadFailed, SchemaWarnings } from './components/States'
@@ -9,6 +10,7 @@ import { NcdScdTab } from './features/ncd-scd/NcdScdTab'
 import { OthersTab } from './features/others/OthersTab'
 import { WeeklyReviewTab } from './features/weekly-review/WeeklyReviewTab'
 import { DataManager } from './components/DataManager'
+import { Login, AuthBadge } from './components/Login'
 import { monthLabel } from './components/charts'
 
 const MAIN_TABS = [
@@ -32,6 +34,28 @@ export default function App() {
 
   const hasData = !!meta.data && months.length > 0
 
+  // A protected deployment answers 401 until a password is stored.
+  const needsLogin = meta.isError && meta.error instanceof AuthError
+  if (needsLogin) {
+    return (
+      <>
+        <header>
+          <div>
+            <h1>iLIFT Programme — Integrated Dashboard</h1>
+            <div className="sub">
+              Integrated Lung Health for Tribals &nbsp;|&nbsp; William J Clinton Foundation
+            </div>
+          </div>
+        </header>
+        <Login wrong={hasCredential()} onSignedIn={() => meta.refetch()} />
+      </>
+    )
+  }
+
+  const level = meta.data?.auth?.level ?? 'admin'
+  const isAdmin = level === 'admin'
+  const protectedMode = !!meta.data?.auth?.read_protected
+
   return (
     <>
       <header>
@@ -47,14 +71,19 @@ export default function App() {
               Data through {monthLabel(months[months.length - 1])}
             </span>
           )}
-          <button
-            className="btn-r"
-            onClick={() => refresh.mutate()}
-            disabled={refresh.isPending}
-            title="Re-read the data/incoming folder and recompute"
-          >
-            {refresh.isPending ? 'Refreshing…' : '⟳ Refresh data'}
-          </button>
+          {/* Refresh mutates server state, so viewers don't get the button —
+              the server would refuse it anyway, but offering it would mislead. */}
+          {isAdmin && (
+            <button
+              className="btn-r"
+              onClick={() => refresh.mutate()}
+              disabled={refresh.isPending}
+              title="Re-read the data folder and recompute"
+            >
+              {refresh.isPending ? 'Refreshing…' : '⟳ Refresh data'}
+            </button>
+          )}
+          <AuthBadge level={level} protectedMode={protectedMode} />
         </div>
       </header>
 
@@ -69,7 +98,7 @@ export default function App() {
       {meta.data && months.length === 0 && (
         <>
           <NoData sources={meta.data.sources} />
-          <DataManager meta={meta.data} />
+          <DataManager meta={meta.data} isAdmin={isAdmin} />
         </>
       )}
 
@@ -105,7 +134,7 @@ export default function App() {
           {tab === 'ncd'  && <NcdScdTab filters={filters} months={activeMonths} />}
           {tab === 'oth'  && <OthersTab filters={filters} months={activeMonths} />}
           {tab === 'wr'   && <WeeklyReviewTab filters={filters} />}
-          {tab === 'data' && <DataManager meta={meta.data} />}
+          {tab === 'data' && <DataManager meta={meta.data} isAdmin={isAdmin} />}
 
           <footer>
             <div className="prov">

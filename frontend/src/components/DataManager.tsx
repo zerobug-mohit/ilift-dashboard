@@ -38,7 +38,7 @@ const fmtWhen = (iso: string | null) => {
   return `${d.toLocaleDateString()} (${rel})`
 }
 
-export function DataManager({ meta }: { meta: MetaResponse }) {
+export function DataManager({ meta, isAdmin = true }: { meta: MetaResponse; isAdmin?: boolean }) {
   return (
     <div className="main">
       <div className="sec">
@@ -74,17 +74,34 @@ export function DataManager({ meta }: { meta: MetaResponse }) {
         </div>
       </div>
 
-      <div className="sec">
-        <div className="sh b">Upload new data</div>
-        <div style={{
-          background: '#fff', padding: 14, borderRadius: '0 0 7px 7px',
-          display: 'grid', gap: 12, boxShadow: '0 1px 4px rgba(0,0,0,.07)',
-        }}>
-          {SLOTS.map((s) => <UploadSlotCard key={s.id} slot={s} />)}
+      {isAdmin ? (
+        <div className="sec">
+          <div className="sh b">Upload new data</div>
+          <div style={{
+            background: '#fff', padding: 14, borderRadius: '0 0 7px 7px',
+            display: 'grid', gap: 12, boxShadow: '0 1px 4px rgba(0,0,0,.07)',
+          }}>
+            {SLOTS.map((s) => <UploadSlotCard key={s.id} slot={s} />)}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="sec">
+          <div className="sh g">Updating the data</div>
+          <div style={{
+            background: '#fff', padding: 14, borderRadius: '0 0 7px 7px',
+            boxShadow: '0 1px 4px rgba(0,0,0,.07)', fontSize: 12,
+            color: 'var(--grey)', lineHeight: 1.8,
+          }}>
+            You have viewing access. New exports are uploaded by whoever holds the
+            admin token — the figures above update for everyone as soon as they do.
+            <br />
+            If you need to upload data yourself, ask them for the admin token and
+            sign in with it instead of the viewing password.
+          </div>
+        </div>
+      )}
 
-      <ConnectionSettings meta={meta} />
+      <ConnectionSettings meta={meta} canEdit={isAdmin} />
     </div>
   )
 }
@@ -185,13 +202,15 @@ function UploadResult({ result }: { result: UploadResponse }) {
   )
 }
 
-function ConnectionSettings({ meta }: { meta: MetaResponse }) {
+function ConnectionSettings({ meta, canEdit = true }: { meta: MetaResponse; canEdit?: boolean }) {
   const proxied = isProxied()
   const remote = isRemoteHostedWithLocalApi()
   const [value, setValue] = useState(getApiOrigin())
   // Under the dev proxy there is nothing to configure, so keep the field out of
   // the way rather than inviting an edit that would break a working setup.
-  const [showAdvanced, setShowAdvanced] = useState(!proxied || hasExplicitBase())
+  // Viewers never get it: pointing the dashboard elsewhere is not their job,
+  // and a wrong value looks identical to the server being down.
+  const [showAdvanced, setShowAdvanced] = useState(canEdit && (!proxied || hasExplicitBase()))
 
   return (
     <div className="sec">
@@ -218,7 +237,7 @@ function ConnectionSettings({ meta }: { meta: MetaResponse }) {
           {new Date(meta.loaded_at).toLocaleString()}.
         </div>
 
-        {!showAdvanced && (
+        {!showAdvanced && canEdit && (
           <button className="dl-btn" onClick={() => setShowAdvanced(true)}>
             Change API address
           </button>

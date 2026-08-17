@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getApiBase } from './base'
+import { authHeaders } from './auth'
 import type {
   Gender, MetaResponse, MetricsResponse, NnsResponse, WeeklyResponse,
   SputumResponse, UploadResponse, UploadSlot,
@@ -22,23 +23,41 @@ export class ConnectionError extends Error {
   }
 }
 
+/** 401 — no credential, or the wrong one. */
+export class AuthError extends Error {
+  constructor(message: string) { super(message) }
+}
+
+/** 403 — a valid viewer credential, but this action needs admin. */
+export class ForbiddenError extends Error {
+  constructor(message: string) { super(message) }
+}
+
 async function request<T>(path: string, init?: RequestInit, params?: Record<string, string>): Promise<T> {
   const base = getApiBase()
   const qs = params ? `?${new URLSearchParams(params)}` : ''
 
   let res: Response
   try {
-    res = await fetch(`${base}${path}${qs}`, init)
+    res = await fetch(`${base}${path}${qs}`, {
+      ...init,
+      headers: { ...authHeaders(), ...(init?.headers ?? {}) },
+    })
   } catch (e) {
     // Network-level failure: server down, CORS refused, mixed content blocked
     throw new ConnectionError(base, e)
   }
 
   const body = await res.json().catch(() => null)
+  const msg = (body as { message?: string })?.message ?? res.statusText
+
+  if (res.status === 401) throw new AuthError(msg)
+  if (res.status === 403 && (body as { error?: string })?.error === 'forbidden') {
+    throw new ForbiddenError(msg)
+  }
 
   if (!res.ok && res.status !== 207) {
     // The backend returns { error, message } on 4xx/503
-    const msg = (body as { message?: string })?.message ?? res.statusText
     throw new HttpError(res.status, msg, body)
   }
   return body as T

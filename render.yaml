@@ -1,0 +1,51 @@
+# Render blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploy:
+#   1. Push this repo to GitHub (done).
+#   2. Render dashboard → New → Blueprint → pick this repo.
+#   3. Render prompts for the two secrets below; set them, then deploy.
+#
+# Everything runs in one service on one URL: the dashboard at /, the API at
+# /api. No CORS, no browser local-network permission, no API address to
+# configure.
+
+services:
+  - type: web
+    name: ilift-dashboard
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter          # free tier has no persistent disk; see the disk note
+
+    healthCheckPath: /api/health
+
+    # Uploaded workbooks live here. WITHOUT a disk, the container filesystem is
+    # wiped on every restart and redeploy, and the dashboard would come back
+    # empty until someone re-uploaded — so this is not optional in practice.
+    disk:
+      name: ilift-data
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      - key: ILIFT_DATA_DIR
+        value: /data
+      - key: ILIFT_HOST
+        value: 0.0.0.0
+      - key: ILIFT_PORT
+        value: 8000
+
+      # Shared password for the team. Everyone who views the dashboard uses it.
+      # sync:false means Render asks for the value instead of storing it here.
+      - key: ILIFT_VIEWER_PASSWORD
+        sync: false
+
+      # Held only by whoever refreshes the data. Grants upload as well as view.
+      # Generate a long random string; do not reuse the viewer password.
+      - key: ILIFT_ADMIN_TOKEN
+        sync: false
+
+      # The dashboard and API share an origin here, so no extra origins are
+      # needed. Set this only if you also point the GitHub Pages build at this
+      # deployment, e.g. https://zerobug-mohit.github.io
+      - key: ILIFT_ALLOWED_ORIGINS
+        sync: false

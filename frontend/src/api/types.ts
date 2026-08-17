@@ -30,6 +30,16 @@ export interface SchemaConflict {
   claimants: string[]
 }
 
+export type AuthLevel = 'admin' | 'viewer' | 'anonymous'
+
+export interface AuthStatus {
+  read_protected: boolean
+  write_protected: boolean
+  mode: string
+  /** What this caller is allowed to do, decided by the server. */
+  level: AuthLevel
+}
+
 export interface MetaResponse {
   months: string[]
   loaded_at: string
@@ -39,6 +49,7 @@ export interface MetaResponse {
   beneficiaries: number
   sources: SourceStatus[]
   cache: { loaded: boolean; fingerprint: string | null; entries: number; load_error: string | null }
+  auth: AuthStatus
   schema: { warnings: string[]; conflicts: SchemaConflict[] }
   notes: {
     raw_sheet_available: boolean

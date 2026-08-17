@@ -13,7 +13,38 @@
 
 suppressPackageStartupMessages({
   library(writexl)
+  library(readxl)
 })
+
+# ── Writing ──────────────────────────────────────────────────────────────────
+# Every file is read back after writing, because a silent failure here is
+# expensive: writexl once emitted structurally invalid XML for the Logic sheet
+# — a cell tag came out as `<c r="FN3982" t"BN4351">`, missing its `=` — inside
+# a 9 MB sheet. The zip was well-formed, so nothing complained until readxl
+# failed with "expected =" and the dashboard reported no data at all.
+#
+# Two things keep that from recurring: unused cells are NA rather than "" (see
+# below), which cuts the sheet by an order of magnitude, and this read-back.
+# openxlsx was tried as an alternative writer but its zip step fails on some
+# Windows setups, so writexl + verification is the more portable pairing.
+write_sheets <- function(sheets, path) {
+  write_xlsx(sheets, path)
+
+  for (nm in names(sheets)) {
+    got <- tryCatch(
+      suppressWarnings(read_excel(path, sheet = nm, n_max = 5)),
+      error = function(e) {
+        stop("wrote ", basename(path), " but sheet '", nm,
+             "' cannot be read back: ", conditionMessage(e),
+             "\n  The file on disk is corrupt. Do not use it.", call. = FALSE)
+      }
+    )
+    if (ncol(got) < 1) {
+      stop("sheet '", nm, "' in ", basename(path), " read back with no columns")
+    }
+  }
+  invisible(path)
+}
 
 # Seed and size are overridable so a second, different dataset can be generated
 # to prove the dashboard picks up new data without a rebuild:
@@ -126,7 +157,10 @@ crd_dx   <- !is.na(crd_res) & crd_res %in% c("COPD","Asthma","Others")
 
 nikshay_id <- ifelse(tb_flag, sample(700000:799999, N, replace = TRUE), 0)
 
-L <- as.data.frame(matrix("", nrow = N, ncol = N_COLS), stringsAsFactors = FALSE)
+# NA, not "": an empty string is a real cell and gets written to the sheet XML,
+# which put 783,000 cells (9 MB) in the file and was where writexl corrupted it.
+# NA cells are omitted entirely.
+L <- as.data.frame(matrix(NA_character_, nrow = N, ncol = N_COLS), stringsAsFactors = FALSE)
 colnames(L) <- headers
 
 L[[1]]   <- camp_id[row_camp]
@@ -174,15 +208,15 @@ L[[178]] <- camp_lat[row_camp]   # Latitude  (named header, per camp)
 L[[179]] <- camp_lon[row_camp]   # Longitude (named header, per camp)
 
 # RAW sheet — needs col 169 = Expert Referral (calc_v2.R:427)
-RAW <- as.data.frame(matrix("", nrow = N, ncol = N_COLS), stringsAsFactors = FALSE)
+RAW <- as.data.frame(matrix(NA_character_, nrow = N, ncol = N_COLS), stringsAsFactors = FALSE)
 colnames(RAW) <- headers
 RAW[[2]]   <- dates
 RAW[[50]]  <- all_bid
 RAW[[169]] <- pick(c("Immediate referral","Deferred referral","No","-"), N,
                    prob = c(0.05, 0.10, 0.55, 0.30))
 
-write_xlsx(list(`Logic sheet` = L, `RAW DATA (paste here)` = RAW),
-           file.path(incoming, "ris_fixture.xlsx"))
+write_sheets(list(`Logic sheet` = L, `RAW DATA (paste here)` = RAW),
+             file.path(incoming, "ris_fixture.xlsx"))
 
 # ── CRD MIS ──────────────────────────────────────────────────────────────────
 crd_bids <- sample(bids, 900)
@@ -196,14 +230,14 @@ CRD <- data.frame(
                                      prob = c(0.22, 0.11, 0.09, 0.58)),
   check.names = FALSE, stringsAsFactors = FALSE
 )
-write_xlsx(list(`New Master Sheet` = CRD), file.path(incoming, "crd_mis_fixture.xlsx"))
+write_sheets(list(`New Master Sheet` = CRD), file.path(incoming, "crd_mis_fixture.xlsx"))
 
 # ── Nikshay quarterly files ──────────────────────────────────────────────────
 tb_nik <- unique(nikshay_id[nikshay_id != 0])
 started <- sample(tb_nik, round(length(tb_nik) * 0.88))
 chunks  <- split(started, cut(seq_along(started), 4, labels = FALSE))
 for (i in seq_along(chunks)) {
-  write_xlsx(
+  write_sheets(
     list(Sheet1 = data.frame(Episode_ID = chunks[[i]],
                              Notification_Date = sample(dates, length(chunks[[i]]), replace = TRUE),
                              stringsAsFactors = FALSE)),
