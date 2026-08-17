@@ -28,7 +28,10 @@ if (Sys.getenv("ILIFT_DATA_DIR") == "") {
   Sys.setenv(ILIFT_DATA_DIR = file.path(backend_dir, "data"))
 }
 
-port <- as.integer(Sys.getenv("ILIFT_PORT", unset = "8000"))
+# PORT is the convention on Cloud Run, Heroku, Railway and others: the platform
+# assigns a port and the container must listen on it. ILIFT_PORT wins when set,
+# so an explicit choice still overrides the platform's.
+port <- as.integer(Sys.getenv("ILIFT_PORT", unset = Sys.getenv("PORT", unset = "8000")))
 
 # Bind to all interfaces only when asked. A container needs 0.0.0.0 to be
 # reachable; a laptop does not, and defaulting to it would silently expose the
