@@ -66,6 +66,88 @@ invalidates every cached result automatically.
 
 ---
 
+## Sharing the dashboard with the team (deployed)
+
+This is the option where **everyone views one dashboard and one person uploads**.
+The whole thing — UI and API — runs as a single container on one URL. No CORS,
+no browser local-network permission, no API address for anyone to configure.
+
+### Two credentials
+
+| Variable | Who holds it | Grants |
+|---|---|---|
+| `ILIFT_VIEWER_PASSWORD` | the whole team | viewing every figure |
+| `ILIFT_ADMIN_TOKEN` | whoever refreshes the data | viewing **and** uploading |
+
+Both are just environment variables. Set neither and the API is open, which is
+why local development needs no login.
+
+The UI adapts to whichever was entered: viewers get no upload controls and no
+refresh button, and the server refuses those calls regardless. There is one
+sign-in box, because the server decides what the secret unlocks — nobody has to
+declare which kind they hold.
+
+Generate the admin token randomly, and don't reuse the viewer password:
+
+```bash
+# any of these
+openssl rand -hex 24
+node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+```
+
+### Deploying to Render
+
+1. **Render → New → Blueprint**, pick this repo. It reads
+   [`render.yaml`](render.yaml).
+2. Render prompts for `ILIFT_VIEWER_PASSWORD` and `ILIFT_ADMIN_TOKEN`. Set both.
+   Leave `ILIFT_ALLOWED_ORIGINS` blank — the UI and API share an origin here.
+3. Deploy. First build takes a while (it installs R packages); later ones are
+   cached.
+4. Open the URL, sign in with the admin token, go to **Data**, upload the three
+   exports. Share the URL and the *viewer* password with the team.
+
+**The persistent disk is not optional.** `render.yaml` mounts a 1 GB disk at
+`/data`. Without it the container filesystem is wiped on every restart and
+redeploy, and the dashboard would come back empty until someone re-uploaded.
+That requires a paid instance type; the free tier has no persistent disk and
+also spins down when idle.
+
+Railway and Fly.io work the same way — same `Dockerfile`, same variables, just
+attach a volume at `/data`.
+
+### Before you deploy: what leaves your laptop
+
+The API surface is **aggregate-only**. No endpoint returns individual
+beneficiary records; the finest granularity anywhere is per-camp counts. So what
+viewers can read is summary figures, not the ~16,000 rows.
+
+The uploaded RIS workbook itself *does* contain beneficiary records, and it sits
+on the hosting provider's disk. On a third-party PaaS that means patient
+screening data resting on commercial infrastructure outside CHAI's data
+agreements. That was a considered choice — if it needs revisiting, the same
+container runs unchanged on a CHAI VM or your org's cloud account; only where
+you point it changes.
+
+Two things worth doing either way:
+
+- Put the deployment behind your org's VPN if one is available.
+- Rotate `ILIFT_ADMIN_TOKEN` if it is ever shared by email or chat.
+
+### Running the container locally
+
+```bash
+docker build -t ilift .
+docker run -p 8000:8000 \
+  -e ILIFT_VIEWER_PASSWORD=team-password \
+  -e ILIFT_ADMIN_TOKEN=$(openssl rand -hex 24) \
+  -v ilift-data:/data \
+  ilift
+```
+
+Then open <http://localhost:8000>.
+
+---
+
 ## Hosting the frontend on GitHub Pages
 
 The dashboard can be published as a static site while the backend and all data
@@ -101,8 +183,11 @@ prints the exact command to fix it.
 Pages URL without your backend running sees an empty dashboard and instructions.
 The page is public; the data is not. That is the point — but it does mean Pages
 buys you convenient distribution of the *interface*, not shared access to
-*numbers*. For genuine team access the backend has to run somewhere both people
-can reach, which is a different deployment and a data-governance decision.
+*numbers*.
+
+If what you want is the team seeing live figures, use
+[the deployed setup](#sharing-the-dashboard-with-the-team-deployed) instead.
+This Pages route is for one person running everything locally.
 
 **You must allow local network access, once.** Chrome now blocks a public
 HTTPS site from reaching a loopback address until you permit it. The first time
@@ -195,7 +280,7 @@ real export actually holds at those positions.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/health` | Liveness |
+| `GET /api/health` | Liveness (never authenticated) |
 | `GET /api/meta` | Available months, source freshness, schema diagnostics |
 | `GET /api/metrics?from&to&gender` | ~230 core metrics + monthly series |
 | `GET /api/nns?from&to&gender` | 57 NNS cohorts |
@@ -254,6 +339,10 @@ Set in `.Renviron` or the environment:
 | `ILIFT_PORT` | `8000` | API port |
 | `ILIFT_PROJECT_START` | `2025-07-28` | Start of the project window |
 | `ILIFT_USE_EXCEL_LOGIC` | `true` | Read the Excel-computed Logic sheet |
+| `ILIFT_VIEWER_PASSWORD` | unset (open) | Shared password to view the dashboard |
+| `ILIFT_ADMIN_TOKEN` | unset (open) | Secret granting upload + refresh |
+| `ILIFT_HOST` | `127.0.0.1` | Bind address; `0.0.0.0` in a container |
+| `ILIFT_STATIC_DIR` | `frontend/dist` if built | Built UI to serve at `/` |
 | `ILIFT_ALLOWED_ORIGINS` | localhost only | Extra origins allowed to call the API (comma-separated) |
 | `ILIFT_MAX_UPLOAD_MB` | `150` | Upload size ceiling |
 | `ILIFT_FIXTURE_SEED` | `42` | Fixture generator seed |
@@ -271,6 +360,8 @@ Rscript backend/scripts/test.R
   missing columns are reported rather than read as zero.
 - **`test-range-dedup.R`** — range totals never exceed sum-of-months; screened
   equals distinct beneficiaries; repeat attenders counted once.
+- **`test-auth.R`** — the viewer/admin boundary: unset variables meaning
+  "open", a viewer password being refused on write endpoints, near-miss tokens.
 - **`test-uploads.R`** — filename validation for the upload endpoint:
   traversal, Excel lock files, wrong extensions, control characters.
 - **`test-parity.R`** — full-period totals against the Excel reference
@@ -292,6 +383,10 @@ Frontend: `cd frontend && npm run typecheck`.
 - **Verify against real data.** Every number here comes from synthetic
   fixtures. The parity suite is written and will run as soon as a real export
   is present.
+- **Verify the container build.** Docker is not installed on the machine this
+  was written on, so the Dockerfile and render.yaml are unrun. The app they
+  wrap is verified (single-origin serving, auth, upload loop all tested), but
+  expect to iterate once on the first Render build.
 - Automated ingestion (RISHUB / Google Sheets / SharePoint), if wanted later.
   The ingest layer is isolated so connectors can be added without touching
   metric logic.
