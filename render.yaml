@@ -16,6 +16,12 @@ services:
     dockerfilePath: ./Dockerfile
     plan: starter          # free tier has no persistent disk; see the disk note
 
+    # Render defaults to Oregon, which would put the data in the United States
+    # and add ~250ms for users in India. Singapore is the nearest region Render
+    # offers — there is no India region, so the uploaded workbook rests outside
+    # India either way. Worth raising internally before this carries real data.
+    region: singapore
+
     healthCheckPath: /api/health
 
     # Uploaded workbooks live here. WITHOUT a disk, the container filesystem is

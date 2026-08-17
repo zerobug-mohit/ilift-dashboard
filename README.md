@@ -101,10 +101,17 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
    [`render.yaml`](render.yaml).
 2. Render prompts for `ILIFT_VIEWER_PASSWORD` and `ILIFT_ADMIN_TOKEN`. Set both.
    Leave `ILIFT_ALLOWED_ORIGINS` blank — the UI and API share an origin here.
-3. Deploy. First build takes a while (it installs R packages); later ones are
+3. Check the summary before confirming: service type **Web Service**, runtime
+   **Docker**, region **Singapore**, plan **Starter**, and a 1 GB disk mounted at
+   `/data`. All of these come from `render.yaml`; the UI lets you override them,
+   and two of the overrides break the deployment (see below).
+4. Deploy. First build takes a while (it installs R packages); later ones are
    cached.
-4. Open the URL, sign in with the admin token, go to **Data**, upload the three
+5. Open the URL, sign in with the admin token, go to **Data**, upload the three
    exports. Share the URL and the *viewer* password with the team.
+
+Do not pick **Static Site**: it would publish the frontend with no R backend, so
+the dashboard would load and then report that it cannot reach the API.
 
 **The persistent disk is not optional.** `render.yaml` mounts a 1 GB disk at
 `/data`. Without it the container filesystem is wiped on every restart and
@@ -127,6 +134,11 @@ screening data resting on commercial infrastructure outside CHAI's data
 agreements. That was a considered choice — if it needs revisiting, the same
 container runs unchanged on a CHAI VM or your org's cloud account; only where
 you point it changes.
+
+Render has no India region. `render.yaml` selects Singapore as the nearest one,
+but the workbook still rests outside India — relevant under the DPDP Act, and
+worth confirming with whoever owns data governance before this carries real
+patient data.
 
 Two things worth doing either way:
 
