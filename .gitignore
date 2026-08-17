@@ -39,3 +39,6 @@ Thumbs.db
 
 # Build artifacts
 frontend/tsconfig.tsbuildinfo
+
+# Generated snapshot output (regenerate with: npm run publish)
+publish/

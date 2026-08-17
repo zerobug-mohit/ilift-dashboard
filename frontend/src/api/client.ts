@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getApiBase } from './base'
 import { authHeaders } from './auth'
+import { IS_STATIC, fetchSnapshot } from './staticSource'
 import type {
   Gender, MetaResponse, MetricsResponse, NnsResponse, WeeklyResponse,
   SputumResponse, UploadResponse, UploadSlot,
@@ -34,6 +35,10 @@ export class ForbiddenError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit, params?: Record<string, string>): Promise<T> {
+  // A published snapshot answers from files. Diverting here rather than in each
+  // hook keeps every caller identical between the two modes.
+  if (IS_STATIC) return fetchSnapshot<T>(path, params)
+
   const base = getApiBase()
   const qs = params ? `?${new URLSearchParams(params)}` : ''
 
@@ -79,7 +84,8 @@ export function useMeta() {
     queryKey: ['meta'],
     queryFn: () => get<MetaResponse>('/meta'),
     // Poll so a file dropped into data/incoming/ is noticed without a reload.
-    refetchInterval: 30_000,
+    // A published snapshot cannot change under us, so don't poll it.
+    refetchInterval: IS_STATIC ? false : 30_000,
     retry: false,
   })
 }

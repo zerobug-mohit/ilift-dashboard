@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { useUpload } from '../api/client'
+import { IS_STATIC } from '../api/staticSource'
 import {
   getApiOrigin, setApiBase, clearApiBase, DEFAULT_LOCAL_API,
   isRemoteHostedWithLocalApi, isProxied, hasExplicitBase,
@@ -84,6 +85,28 @@ export function DataManager({ meta, isAdmin = true }: { meta: MetaResponse; isAd
             {SLOTS.map((s) => <UploadSlotCard key={s.id} slot={s} />)}
           </div>
         </div>
+      ) : IS_STATIC ? (
+        <div className="sec">
+          <div className="sh g">About these figures</div>
+          <div style={{
+            background: '#fff', padding: 14, borderRadius: '0 0 7px 7px',
+            boxShadow: '0 1px 4px rgba(0,0,0,.07)', fontSize: 12,
+            color: 'var(--grey)', lineHeight: 1.8,
+          }}>
+            This is a <strong>published snapshot</strong>, not a live connection.
+            Every figure was calculated{' '}
+            {meta.generated_at
+              ? <>on <strong>{new Date(meta.generated_at).toLocaleString()}</strong></>
+              : 'when the snapshot was published'}{' '}
+            and will not change until it is published again.
+            <br />
+            Filters, tables and charts all work normally — every combination of
+            months and gender was calculated in advance.
+            <br /><br />
+            The underlying beneficiary records were never uploaded here. Only the
+            aggregate numbers you can see were published.
+          </div>
+        </div>
       ) : (
         <div className="sec">
           <div className="sh g">Updating the data</div>
@@ -101,7 +124,8 @@ export function DataManager({ meta, isAdmin = true }: { meta: MetaResponse; isAd
         </div>
       )}
 
-      <ConnectionSettings meta={meta} canEdit={isAdmin} />
+      {/* No API to point anywhere in a snapshot. */}
+      {!IS_STATIC && <ConnectionSettings meta={meta} canEdit={isAdmin} />}
     </div>
   )
 }

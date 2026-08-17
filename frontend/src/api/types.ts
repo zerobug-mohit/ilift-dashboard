@@ -43,6 +43,10 @@ export interface AuthStatus {
 export interface MetaResponse {
   months: string[]
   loaded_at: string
+  /** Snapshot only: when the figures were calculated. */
+  generated_at?: string
+  /** True when served from a published snapshot rather than a live API. */
+  static?: boolean
   fingerprint: string
   project_start: string
   rows: number

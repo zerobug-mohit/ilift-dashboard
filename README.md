@@ -66,6 +66,113 @@ invalidates every cached result automatically.
 
 ---
 
+## Which sharing option?
+
+| | Local only | Published snapshot | Deployed server |
+|---|---|---|---|
+| Who can view | one person | anyone with the link | anyone with the password |
+| Cost | free | free | ~$7/mo |
+| Server to run | none | none | one |
+| Where the RIS workbook rests | your machine | **your machine** | the host's disk |
+| Numbers are | live | as of last publish | live |
+| Refresh step | upload in browser | `npm run publish:push` | upload in browser |
+| Password protection | n/a | needs Cloudflare Access | built in |
+
+**Published snapshot** is the option with the least to go wrong: no server, no
+cost, and the beneficiary records never leave the machine that publishes. Its
+tradeoff is that figures are current as of the last publish, and static hosting
+cannot check a password on its own.
+
+**Deployed server** is right if you need live figures behind a password.
+
+---
+
+## Publishing a snapshot (no server)
+
+Everything the dashboard can show is precomputed into JSON files and published
+as a static site. There is no backend, so nothing to host, pay for, or keep
+running — and the RIS workbook stays where it is.
+
+### What Trisha does
+
+```bash
+npm run publish:push
+```
+
+That single command:
+
+1. Precomputes **every** month-range and gender combination (66 ranges × 3 = 198
+   payloads, plus weekly) — about 5 minutes for 11 months of data
+2. Builds the dashboard to read those files
+3. Pushes the result to the `gh-pages` branch
+
+Then she sends the team a link. To update the figures later: drop in the new
+exports, run the same command again.
+
+Before publishing she needs the data loaded, exactly as for local use — either
+`npm run dev` and upload through the **Data** tab, or drop the files into
+`backend/data/incoming/` directly.
+
+`npm run publish` (without `:push`) builds into `publish/` without pushing, so
+you can check it first with `npx serve publish`.
+
+### What the team sees
+
+A normal dashboard. Filters, tables, charts and the Excel/PPTX exports all work,
+because every combination was calculated in advance. The **Data** tab explains
+that it is a snapshot and states when it was generated, so nobody mistakes old
+figures for current ones.
+
+No login, no upload controls, no refresh button.
+
+### The correctness point
+
+The tempting shortcut is to publish 11 monthly figures and let the browser add
+them up for whatever range the user picks. **That is exactly the defect this
+rebuild fixed** (`build_v3.py:703`): monthly figures each deduplicate
+beneficiaries within their own month, so summing them double-counts anyone
+screened in two months.
+
+So each range is computed separately, through the same `metrics_for_range()` the
+API uses. That is why it is 198 payloads rather than 11 — and it makes the
+snapshot byte-identical to the live API. Verified across sample ranges; see
+`export_static.R` for the reasoning.
+
+### Only aggregates are published
+
+No endpoint and no exported file contains an individual record — the finest
+granularity anywhere is per-camp counts. `publish.mjs` additionally greps its own
+output for beneficiary-shaped identifiers and refuses to continue if it finds
+any, because that step is what makes files public.
+
+This is what removes the data-governance question entirely: there is no vendor
+disk holding patient data, and no region to choose.
+
+### Adding a password
+
+Static hosting cannot verify a password — a prompt in the JavaScript is theatre,
+since the JSON is right there in the network tab. If the figures need protecting:
+
+- **Cloudflare Pages + Cloudflare Access** — upload `publish/` to Cloudflare
+  Pages and put an Access policy in front. Real authentication (email codes or
+  Google sign-in) at the edge, free for small teams, still no server. Build with
+  `node scripts/publish.mjs --root` for Cloudflare, since it serves from the
+  domain root rather than a `/repo/` subpath.
+- Otherwise treat the link as unlisted-but-readable, which is fine for figures
+  you would put in a programme report and not otherwise.
+
+### First-time setup for GitHub Pages
+
+After the first `npm run publish:push`, set the source once:
+
+**Settings → Pages → Source: "Deploy from a branch" → Branch: `gh-pages` / (root)**
+
+That replaces the Actions-based workflow, so disable
+`.github/workflows/deploy-pages.yml` if you switch to snapshots — two Pages
+deployments cannot coexist on one repo.
+
+---
+
 ## Sharing the dashboard with the team (deployed)
 
 This is the option where **everyone views one dashboard and one person uploads**.
@@ -323,6 +430,8 @@ backend/
     metrics_nns.R        NNS cohorts
     metrics_weekly.R     weekly review
   scripts/
+    export_static.R      precompute every view as JSON (snapshot mode)
+  scripts/
     serve.R              start the API
     test.R               run the test suite
     smoke.R              exercise every module without HTTP
@@ -357,6 +466,7 @@ Set in `.Renviron` or the environment:
 | `ILIFT_STATIC_DIR` | `frontend/dist` if built | Built UI to serve at `/` |
 | `ILIFT_ALLOWED_ORIGINS` | localhost only | Extra origins allowed to call the API (comma-separated) |
 | `ILIFT_MAX_UPLOAD_MB` | `150` | Upload size ceiling |
+| `VITE_DATA_MODE` | unset | Set to `static` at build time to read a snapshot instead of the API |
 | `ILIFT_FIXTURE_SEED` | `42` | Fixture generator seed |
 | `ILIFT_FIXTURE_N` | `4000` | Fixture beneficiary count |
 
