@@ -56,6 +56,44 @@ export function isWritePath(path: string): boolean {
 export class SnapshotError extends Error {}
 
 /**
+ * The manifest, fetched once per page load and shared by every caller.
+ *
+ * Deliberately revalidated (`no-cache`, not `no-store`): the browser still
+ * sends a conditional request and takes a 304 when nothing has changed, so
+ * this stays cheap while never serving a stale copy. It is the one file that
+ * must be current, because everything else is versioned from it.
+ */
+let manifestPromise: Promise<Record<string, unknown> | null> | null = null
+
+function loadManifest(): Promise<Record<string, unknown> | null> {
+  if (!manifestPromise) {
+    manifestPromise = fetch(`${DATA_ROOT}/manifest.json`, { cache: 'no-cache' })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+  }
+  return manifestPromise
+}
+
+/**
+ * A stamp that changes whenever the snapshot is republished.
+ *
+ * Data files keep stable names, so a browser that has seen
+ * `weekly/2025-07__2025-08.json` will happily serve yesterday's copy after a
+ * refresh — the figures change but the reader still sees the old ones, which
+ * is the one thing a dashboard must not do. Appending the publish time makes
+ * each new snapshot a URL the browser has never seen, while leaving caching
+ * fully effective between publishes.
+ *
+ * The page URL is untouched: this is added by the page to its own background
+ * requests, so links and bookmarks keep working unchanged.
+ */
+async function snapshotVersion(): Promise<string | null> {
+  const m = await loadManifest()
+  const stamp = (m?.generated_at ?? m?.loaded_at) as string | undefined
+  return stamp ? encodeURIComponent(stamp) : null
+}
+
+/**
  * Fetch one snapshot file.
  *
  * A 404 here is worth distinguishing from a network failure: it means the
@@ -70,14 +108,28 @@ export async function fetchSnapshot<T>(path: string, params?: Record<string, str
     )
   }
 
-  const url = snapshotUrl(path, params)
-  if (!url) throw new SnapshotError(`No published data for ${path}`)
+  // The manifest is what supplies the version, so it cannot itself be
+  // versioned. Serving it from the shared promise also means one fetch rather
+  // than two for the request that triggers the page's first render.
+  if (path === '/meta' || path === '/health') {
+    const m = await loadManifest()
+    if (!m) throw new SnapshotError('Could not load the published data.')
+    return m as T
+  }
+
+  const base = snapshotUrl(path, params)
+  if (!base) throw new SnapshotError(`No published data for ${path}`)
+
+  // No stamp (an older snapshot, or a manifest that failed to load) simply
+  // means no cache-busting — the previous behaviour, rather than a broken page.
+  const version = await snapshotVersion()
+  const url = version ? `${base}?v=${version}` : base
 
   let res: Response
   try {
     res = await fetch(url)
   } catch (e) {
-    throw new SnapshotError(`Could not load ${url}. The published data may be incomplete.`)
+    throw new SnapshotError(`Could not load ${base}. The published data may be incomplete.`)
   }
 
   if (res.status === 404) {
