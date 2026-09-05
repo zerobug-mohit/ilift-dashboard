@@ -18,7 +18,7 @@ suppressPackageStartupMessages({
 # serve.R sets the working directory to backend/, so R/ resolves from there.
 source_dir <- if (dir.exists("R")) "R" else file.path("backend", "R")
 
-for (f in c("config.R", "schema.R", "ingest.R", "cache.R", "uploads.R", "auth.R",
+for (f in c("config.R", "schema.R", "flags.R", "ingest.R", "cache.R", "uploads.R", "auth.R",
             "metrics_core.R", "metrics_nns.R", "metrics_weekly.R")) {
   source(file.path(source_dir, f))
 }

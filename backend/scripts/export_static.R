@@ -40,7 +40,7 @@ if (Sys.getenv("ILIFT_DATA_DIR") == "") {
   Sys.setenv(ILIFT_DATA_DIR = file.path(backend_dir, "data"))
 }
 
-for (f in c("config.R", "schema.R", "ingest.R", "cache.R", "uploads.R", "auth.R",
+for (f in c("config.R", "schema.R", "flags.R", "ingest.R", "cache.R", "uploads.R", "auth.R",
             "metrics_core.R", "metrics_nns.R", "metrics_weekly.R")) {
   source(file.path("R", f))
 }

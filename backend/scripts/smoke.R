@@ -12,7 +12,7 @@ setwd(backend_dir)
 if (Sys.getenv("ILIFT_DATA_DIR") == "") Sys.setenv(ILIFT_DATA_DIR = file.path(backend_dir, "data"))
 
 suppressPackageStartupMessages({ library(dplyr); library(digest) })
-for (f in c("config.R","schema.R","ingest.R","cache.R",
+for (f in c("config.R","schema.R", "flags.R","ingest.R","cache.R",
             "metrics_core.R","metrics_nns.R","metrics_weekly.R")) source(file.path("R", f))
 
 cat("── sources ──────────────────────────────────────────\n")

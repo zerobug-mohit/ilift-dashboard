@@ -46,9 +46,13 @@ old one moves to `incoming/archive/`); Nikshay files accumulate.
 
 | Source | Drop into | Filename must match |
 |---|---|---|
-| RIS Hub export | `backend/data/incoming/` | `ris*.xlsx` |
-| CRD MIS ("New Master Sheet") | `backend/data/incoming/` | `crd*.xlsx` |
-| Nikshay quarterly files | `backend/data/incoming/nikshay/` | `*.xlsx` |
+| RIS Hub export | `backend/data/incoming/` | `ris*.csv` or `ris*.xlsx` |
+| CRD MIS ("New Master Sheet") | `backend/data/incoming/` | `crd*.csv` or `crd*.xlsx` |
+| Nikshay quarterly files | `backend/data/incoming/nikshay/` | `*.csv` or `*.xlsx` |
+
+The **raw** exports are what you want — no Excel step. `flags.R` computes the
+Logic sheet in R (see below). A workbook that already contains a computed Logic
+sheet still works and is left untouched.
 
 The backend fingerprints the source files (name + size + mtime), so any change
 invalidates every cached result automatically.
@@ -63,6 +67,58 @@ invalidates every cached result automatically.
 3. Check the **Data** tab shows all three as *loaded* with today's date, and
    that no orange column-mapping banner appeared.
 4. Read the numbers. Export tables to Excel or slides to PPTX from any tab.
+
+---
+
+## The Logic sheet, computed in R
+
+The dashboard's figures rest on ~18 derived flags — `Symptomatic`, `MB+`,
+`Eligible for sputum`, the CXR × symptom cross-tabs. These used to be computed
+by formulas inside an Excel workbook, so every refresh needed a person to paste
+the raw export into that workbook first. The spreadsheet was the only copy of
+that logic, and nothing tested it.
+
+[`backend/R/flags.R`](backend/R/flags.R) now computes them, following
+`SECTION III` of the legacy `iLift Data and Dashboard.R` (lines 167-503).
+Section markers in the code (`[13A]` … `[13Z]`) map onto that file so the two
+can be diffed.
+
+**Upload the raw exports.** Ingest detects whether the flags are present:
+absent, it computes them; present, it leaves the file alone. So the Excel route
+still works unchanged, and both can be run against the same data and compared.
+
+### It preserves the definitions, including the odd ones
+
+Nothing was "fixed" in the port. `"Beneficiary ID not present"` still counts as
+a normal X-ray; `BMI > 0` still guards the underweight test so a missing height
+does not read as underweight; comparisons against the string `"0"` are kept
+because that is the export's empty marker.
+
+Those choices are deliberate. The Excel workbook remains the reference the
+programme reports against, and correcting a definition is a separate decision
+from removing the manual step — doing both at once would make any disagreement
+impossible to attribute.
+
+### How you know it is working
+
+The raw export carries Deeptek's own `X-Ray Eligibility`, `Sputum Eligibility`
+and `Symptoms` columns. Ingest recomputes each independently and reports how
+often the two agree:
+
+```
+[flags] computed in R; agreement with Deeptek's own columns:
+  - Eligible for X-ray    93.4% of 1,339 rows
+      ^ below 95% — worth checking before trusting these figures
+  - Eligible for sputum   99.7% of 1,339 rows
+  - Vulnerability         99.3% of 1,339 rows
+```
+
+A sudden drop means one side changed. The X-ray figure sits below the threshold
+today; `Eligible for X-ray` is not used by any dashboard metric, so it is a
+signal rather than a fault, but it is worth understanding before relying on it.
+
+`test-flags.R` asserts the definitions themselves, case by case, since these
+formulas no longer have a spreadsheet to be checked against.
 
 ---
 
@@ -87,15 +143,15 @@ Three subfolders, named exactly:
 
 | Subfolder | What goes in | Behaviour |
 |---|---|---|
-| `ris/` | RIS Hub export | Newest file wins — the export is cumulative |
-| `crd_mis/` | CRD MIS export | Newest file wins |
+| `ris/` | RIS Hub raw export (.csv) | Newest file wins — the export is cumulative |
+| `crd_mis/` | CRD MIS raw export (.csv) | Newest file wins |
 | `nikshay/` | Nikshay quarterly files | All kept; they accumulate |
 
 That mirrors the replace/accumulate rules the upload endpoint applies
 (`uploads.R:65-73`), so both routes produce identical numbers.
 
-Files may be `.xlsx` or Google Sheets — a Sheet is exported to `.xlsx` on the
-way through.
+Files may be `.csv`, `.xlsx` or Google Sheets. Upload the **raw** exports —
+the Logic sheet is computed in R (see above), so there is no Excel step.
 
 ### Updating the data
 
@@ -521,6 +577,7 @@ backend/
     cache.R              source-fingerprint caching
     metrics_core.R       calc_logic() port + range-dedup fix
     metrics_nns.R        NNS cohorts
+    flags.R              the Logic sheet, computed from the raw export
     metrics_weekly.R     weekly review
   scripts/
     export_static.R      precompute every view as JSON (snapshot mode)
@@ -589,12 +646,13 @@ Frontend: `cd frontend && npm run typecheck`.
 
 ## Still to do
 
-- **Phase 2 — remove the Excel dependency.** The pipeline still reads the
-  Excel-computed "Logic sheet", which is why a human must paste into Excel
-  before anything works. `SECTION III` of `iLift Data and Dashboard.R:167-503`
-  already ports those formulas to R; porting them into `backend/R/flags.R` and
-  dual-running against the Excel path until every metric matches would remove
-  the manual step. `ILIFT_USE_EXCEL_LOGIC` is the toggle.
+- **Compare the ported flags against Excel on a shared period.** `flags.R`
+  now computes the Logic sheet from the raw export, so the manual paste step is
+  gone. It agrees with Deeptek 99.7% (sputum eligibility) and 99.3%
+  (vulnerability) on real data, but nobody has yet run the Excel workbook and
+  the R port over the *same* month and diffed every metric. Until that happens,
+  treat a disagreement with the Excel dashboard as unexplained rather than
+  as the port being right.
 - **Verify against real data.** Every number here comes from synthetic
   fixtures. The parity suite is written and will run as soon as a real export
   is present.

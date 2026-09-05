@@ -87,7 +87,7 @@ test_that("the raw RIS export is refused rather than guessed at", {
   res <- resolve_schema(raw_like)
   expect_error(
     assert_is_logic_sheet(res, "beneficiary_export_20260101.csv"),
-    "does not look like the RIS Logic sheet"
+    "could not be resolved by name"
   )
 })
 

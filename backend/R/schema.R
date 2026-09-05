@@ -99,9 +99,16 @@ KNOWN_CONFLICTS <- list(
 #' For each field: try to match the header text; if that fails, fall back to
 #' the legacy index. Returns a list with the resolved index per field plus a
 #' diagnostics table describing how each was resolved.
-resolve_schema <- function(df, schema = LOGIC_SCHEMA) {
+#' @param prefer column names this caller knows to be authoritative. When a
+#'   pattern matches several headers and one of them is in `prefer`, that one
+#'   wins. flags.R uses it for the columns it computes: "sputum collected"
+#'   matches both its aggregate "Sputum Collected" and the raw per-timepoint
+#'   "Sputum Collected(Same Day)", and without this the legacy position would
+#'   quietly select the wrong one.
+resolve_schema <- function(df, schema = LOGIC_SCHEMA, prefer = character(0)) {
   headers <- tolower(trimws(colnames(df)))
   ncols   <- length(headers)
+  prefer_idx <- which(colnames(df) %in% prefer)
 
   resolved <- list()
   diags    <- list()
@@ -113,6 +120,9 @@ resolve_schema <- function(df, schema = LOGIC_SCHEMA) {
     if (length(hit) == 1) {
       idx <- hit
       how <- if (idx == spec$idx) "name+position agree" else "name (position differs)"
+    } else if (length(hit) > 1 && length(intersect(hit, prefer_idx)) == 1) {
+      idx <- intersect(hit, prefer_idx)
+      how <- "name (computed column preferred)"
     } else if (length(hit) > 1) {
       # Ambiguous header match — prefer the legacy position if it is among them
       idx <- if (spec$idx %in% hit) spec$idx else hit[1]

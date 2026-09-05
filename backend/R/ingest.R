@@ -86,16 +86,16 @@ assert_is_logic_sheet <- function(res, path) {
   if (n_bad <= length(LOGIC_SHEET_FIELDS) / 2) return(invisible(TRUE))
 
   stop(
-    "This does not look like the RIS Logic sheet.\n",
+    "The derived flags could not be resolved by name.\n",
     "  File: ", basename(path), "\n",
     "  ", n_bad, " of ", length(LOGIC_SHEET_FIELDS),
-    " computed flags could not be found by name, including:\n",
+    " flags are missing, including:\n",
     "    ", paste(utils::head(names(by_position)[by_position], 5), collapse = ", "), "\n\n",
-    "  The raw RIS Hub export contains the observations but not the flags the\n",
-    "  dashboard needs. Paste it into the Excel template that computes the\n",
-    "  Logic sheet, and upload that workbook instead.\n\n",
-    "  Refusing rather than guessing: matching those columns by position would\n",
-    "  produce figures that look plausible and are wrong.",
+    "  A raw export is fine — flags.R computes these. Reaching here means the\n",
+    "  file carried some flags but not all, so it was taken for a Logic sheet\n",
+    "  and left alone. Most likely a partly-filled workbook.\n\n",
+    "  Refusing rather than guessing: resolve_schema() would fall back to column\n",
+    "  position, which produces figures that look plausible and are wrong.",
     call. = FALSE
   )
 }
@@ -108,8 +108,22 @@ ingest_ris <- function() {
 
   L <- read_source_table(path, CONFIG$sheet_logic)
 
+  # A raw export has the observations but not the derived flags. Compute them
+  # here rather than requiring someone to paste the file into Excel first.
+  # A workbook that already carries them is left untouched, so the Excel route
+  # keeps working and the two can be compared.
+  computed_flags <- FALSE
+  if (!has_logic_flags(L)) {
+    message("[ingest] no Logic sheet flags present — computing them from the raw export.")
+    L <- compute_logic_flags(L)
+    computed_flags <- TRUE
+  }
+  agreement <- attr(L, "deeptek_agreement")
+  computed_cols <- attr(L, "computed_columns")
+  if (is.null(computed_cols)) computed_cols <- character(0)
+
   # Resolve columns by header, not blind position (see schema.R)
-  res <- resolve_schema(L)
+  res <- resolve_schema(L, prefer = computed_cols)
   map <- res$index
 
   warns <- schema_warnings(res)
@@ -118,6 +132,9 @@ ingest_ris <- function() {
     for (w in warns) message("  - ", w)
   }
 
+  # Still worth asserting after computing: if compute_logic_flags() ever emits a
+  # column under a name the schema does not recognise, the positional fallback
+  # would silently take over again.
   assert_is_logic_sheet(res, path)
 
   L$camp_date <- suppressWarnings(as.Date(fld(L, map, "camp_date")))
@@ -177,7 +194,9 @@ ingest_ris <- function() {
     raw_ok      = raw_ok,
     path        = path,
     n_rows      = nrow(L),
-    n_bids      = length(unique(L$bid))
+    n_bids      = length(unique(L$bid)),
+    computed_flags = computed_flags,
+    agreement      = agreement
   )
 }
 
