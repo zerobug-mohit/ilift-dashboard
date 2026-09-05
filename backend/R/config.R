@@ -58,8 +58,14 @@ SOURCE_PATTERNS <- list(
   nikshay = "^.*\\.(xlsx?|csv)$"   # inside incoming/nikshay/
 )
 
-#' Locate a source file in the incoming folder by pattern.
-#' Returns the most recently modified match, or NULL if absent.
+#' Locate a source's files in the incoming folder by pattern.
+#'
+#' Returns every match, name-sorted, or NULL if none. All of them are read and
+#' combined: an export too large to download in one go arrives as ris1, ris2,
+#' ris3, and splitting it should not mean choosing between the pieces.
+#'
+#' Name order, not modification time, so the result does not depend on which
+#' chunk finished downloading first.
 find_source <- function(key) {
   pat <- SOURCE_PATTERNS[[key]]
   if (is.null(pat)) return(NULL)
@@ -71,8 +77,7 @@ find_source <- function(key) {
   files <- files[!grepl("^~\\$", basename(files))]   # skip Excel lock files
   if (length(files) == 0) return(NULL)
 
-  if (key == "nikshay") return(sort(files))           # all quarterly files
-  files[order(file.mtime(files), decreasing = TRUE)][1]
+  sort(files)
 }
 
 #' Status of every expected source — powers GET /api/meta so the UI can always

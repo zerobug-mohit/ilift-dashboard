@@ -42,6 +42,77 @@ read_source_table <- function(path, sheet = NULL) {
   }
 }
 
+#' Read one source's files and stack them into a single table.
+#'
+#' A large export often arrives split — ris1.csv, ris2.csv, ris3.csv. Each file
+#' carries its own header row, so this binds by column name rather than pasting
+#' text: the header is honoured once per file and never becomes a data row, and
+#' a chunk whose columns are ordered differently still lines up.
+#'
+#' Rows that are byte-identical across files are dropped. Splitting an export
+#' usually produces no overlap at all, but leaving last month's copy alongside
+#' this month's does, and counting those camps twice would inflate every
+#' row-based figure. A record that was *corrected* between exports is not an
+#' exact duplicate, so both versions survive — see the note in ingest_ris().
+#'
+#' @return the combined data frame, with attributes describing what happened
+read_source_tables <- function(paths, sheet = NULL, label = "source") {
+  frames <- lapply(paths, function(p) {
+    tryCatch(read_source_table(p, sheet), error = function(e) {
+      stop("could not read ", basename(p), ": ", conditionMessage(e), call. = FALSE)
+    })
+  })
+
+  if (length(frames) == 1) {
+    d <- frames[[1]]
+    attr(d, "n_files") <- 1L
+    attr(d, "dropped_duplicates") <- 0L
+    return(d)
+  }
+
+  # Flag a chunk that does not share the others' columns before binding fills
+  # the gaps with NA and the difference disappears into the numbers.
+  cols <- lapply(frames, colnames)
+  common <- Reduce(intersect, cols)
+  for (i in seq_along(frames)) {
+    extra <- setdiff(cols[[i]], common)
+    if (length(extra) > 0) {
+      message("[ingest] ", label, ": ", basename(paths[i]), " has ",
+              length(extra), " column(s) the other files lack — ",
+              "rows from those files will be blank there (",
+              paste(utils::head(extra, 3), collapse = ", "), ")")
+    }
+  }
+
+  combined <- tryCatch(
+    bind_rows(frames),
+    error = function(e) {
+      # Same column typed differently across files — usually one chunk read as
+      # numeric and another as text. Character preserves both; downstream code
+      # coerces per field anyway.
+      message("[ingest] ", label, ": column types differ between files, ",
+              "reading all as text (", conditionMessage(e), ")")
+      bind_rows(lapply(frames, function(f) {
+        f[] <- lapply(f, as.character)
+        f
+      }))
+    }
+  )
+
+  before <- nrow(combined)
+  combined <- combined[!duplicated(combined), , drop = FALSE]
+  dropped <- before - nrow(combined)
+
+  message("[ingest] ", label, ": combined ", length(paths), " files -> ",
+          format(nrow(combined), big.mark = ","), " rows",
+          if (dropped > 0) paste0(" (", format(dropped, big.mark = ","),
+                                  " identical duplicate rows dropped)") else "")
+
+  attr(combined, "n_files") <- length(paths)
+  attr(combined, "dropped_duplicates") <- dropped
+  combined
+}
+
 # Flags that exist only on the Excel-computed "Logic sheet". The raw RIS Hub
 # export carries none of them — it has the observations they are derived from,
 # not the derivations.
@@ -102,11 +173,34 @@ assert_is_logic_sheet <- function(res, path) {
 
 #' Read the RIS workbook: Logic sheet + RAW sheet, filtered to the project window.
 ingest_ris <- function() {
-  path <- find_source("ris")
-  if (is.null(path)) stop("No RIS export found in ", CONFIG$incoming_dir,
-                          ". Expected a file matching 'ris*.xlsx'.")
+  paths <- find_source("ris")
+  if (is.null(paths)) stop("No RIS export found in ", CONFIG$incoming_dir,
+                           ". Expected a file matching 'ris*.csv' or 'ris*.xlsx'.")
+  path <- paths[1]   # representative, for messages and format detection
 
-  L <- read_source_table(path, CONFIG$sheet_logic)
+  L <- read_source_tables(paths, CONFIG$sheet_logic, label = "RIS")
+
+  # Splitting one export into chunks produces no overlap. Stacking two *whole*
+  # exports does, and only byte-identical rows were removed above — so a record
+  # amended between them survives twice, and calc_logic() keeps the first it
+  # sees (metrics_core.R:40), which is the older one. Worth saying out loud
+  # rather than leaving as a silent preference for stale data.
+  if (length(paths) > 1) {
+    bid_col <- grep("^Beneficiary ID$", colnames(L), ignore.case = TRUE)[1]
+    camp_col <- grep("^Camp ID$", colnames(L), ignore.case = TRUE)[1]
+    if (!is.na(bid_col) && !is.na(camp_col)) {
+      visit <- paste(L[[bid_col]], L[[camp_col]])
+      repeats <- sum(duplicated(visit))
+      if (repeats > 0) {
+        message("[ingest] RIS: ", format(repeats, big.mark = ","),
+                " beneficiary/camp pairs appear in more than one file with ",
+                "differing contents.")
+        message("         The earliest version of each is used. If these are ",
+                "successive full exports rather than")
+        message("         chunks of one, keep only the latest in the ris/ folder.")
+      }
+    }
+  }
 
   # A raw export has the observations but not the derived flags. Compute them
   # here rather than requiring someone to paste the file into Excel first.
@@ -208,14 +302,15 @@ ingest_ris <- function() {
 #' Read the CRD MIS workbook — spirometry completion + OPD rows.
 #' Cleaning logic reused from calc_v2.R:47-65.
 ingest_crd <- function() {
-  path <- find_source("crd_mis")
-  if (is.null(path)) {
+  paths <- find_source("crd_mis")
+  if (is.null(paths)) {
     message("[ingest] No CRD MIS file found — spirometry/OPD metrics will be zero.")
     return(list(spiro_comp_bids = character(0), opd_rows = NULL,
                 present = FALSE, path = NULL, n_rows = 0))
   }
 
-  CRD <- read_source_table(path, CONFIG$sheet_crd)
+  path <- paths[1]
+  CRD <- read_source_tables(paths, CONFIG$sheet_crd, label = "CRD MIS")
 
   # The export ships a duplicated ID header and stray unnamed columns
   if ("Beneficiary ID...1" %in% colnames(CRD)) {
@@ -244,7 +339,7 @@ ingest_crd <- function() {
 
   list(spiro_comp_bids = spiro_comp_bids, opd_rows = opd_rows,
        diag_col = grep("Diagnosis.*Action|Action.*MO", colnames(CRD), value = TRUE)[1],
-       present = TRUE, path = path, n_rows = nrow(CRD))
+       present = TRUE, path = path, paths = paths, n_rows = nrow(CRD))
 }
 
 #' Read all Nikshay quarterly workbooks and collect Episode_IDs.
@@ -257,17 +352,12 @@ ingest_nikshay <- function() {
     return(list(episode_ids = numeric(0), present = FALSE, paths = character(0), n_rows = 0))
   }
 
-  frames <- lapply(paths, function(p) {
-    tryCatch(read_source_table(p), error = function(e) {
-      message("[ingest] could not read ", basename(p), ": ", conditionMessage(e)); NULL
-    })
+  nik <- tryCatch(read_source_tables(paths, label = "Nikshay"), error = function(e) {
+    message("[ingest] ", conditionMessage(e)); NULL
   })
-  frames <- Filter(Negate(is.null), frames)
-  if (length(frames) == 0) {
+  if (is.null(nik)) {
     return(list(episode_ids = numeric(0), present = FALSE, paths = paths, n_rows = 0))
   }
-
-  nik <- bind_rows(frames)
   ids <- numeric(0)
   if ("Episode_ID" %in% colnames(nik)) {
     ids <- suppressWarnings(as.numeric(unique(nik$Episode_ID)))

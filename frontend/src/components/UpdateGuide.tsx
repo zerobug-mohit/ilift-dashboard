@@ -18,17 +18,17 @@ const SOURCE_LABELS: Record<string, { name: string; folder: string; note: string
   ris: {
     name: 'RIS Hub export',
     folder: 'ris',
-    note: 'Replaced each time — the export already covers every month to date',
+    note: 'Every file in the folder is combined',
   },
   crd_mis: {
     name: 'CRD MIS',
     folder: 'crd_mis',
-    note: 'Replaced each time',
+    note: 'Every file in the folder is combined',
   },
   nikshay: {
     name: 'Nikshay',
     folder: 'nikshay',
-    note: 'Kept — quarterly files build up',
+    note: 'Every file in the folder is combined',
   },
 }
 
@@ -130,8 +130,17 @@ export function UpdateGuide({ meta }: { meta: MetaResponse }) {
                 </table>
               </div>
               <p style={{ fontSize: 11 }}>
-                There is no need to delete the old file. For RIS and the CRD MIS
-                the newest one is used automatically.
+                <strong>If an export is too big to download in one go</strong>,
+                save it as several files — <code>ris1.csv</code>,{' '}
+                <code>ris2.csv</code>, <code>ris3.csv</code> — and put them all
+                in the folder. They are combined into one table, with each
+                file's header row read once rather than treated as data.
+              </p>
+              <p style={{ fontSize: 11 }}>
+                Uploading the same file twice is harmless; identical rows are
+                dropped. But do clear out last month's export once this
+                month's is in, since keeping both leaves the older version of
+                any record that has since been corrected.
               </p>
             </li>
 

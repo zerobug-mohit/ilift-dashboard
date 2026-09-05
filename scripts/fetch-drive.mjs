@@ -46,9 +46,9 @@ const INCOMING = path.join(DATA_DIR, 'incoming')
  * arriving without it is silently invisible to the dashboard.
  */
 const SLOTS = [
-  { folder: 'ris',     dir: INCOMING,                          prefix: 'ris_', keepAll: false },
-  { folder: 'crd_mis', dir: INCOMING,                          prefix: 'crd_', keepAll: false },
-  { folder: 'nikshay', dir: path.join(INCOMING, 'nikshay'),    prefix: '',     keepAll: true  },
+  { folder: 'ris',     dir: INCOMING,                       prefix: 'ris_' },
+  { folder: 'crd_mis', dir: INCOMING,                       prefix: 'crd_' },
+  { folder: 'nikshay', dir: path.join(INCOMING, 'nikshay'), prefix: ''     },
 ]
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -215,10 +215,13 @@ const main = async () => {
       continue
     }
 
-    // Newest-first from the API; a cumulative export means only the latest counts.
-    const take = slot.keepAll ? sheets : [sheets[0]]
+    // Every file in the folder. An export too large to pull in one go arrives
+    // as ris1/ris2/ris3, and the ingest layer stacks them into one table —
+    // taking only the newest would silently drop the rest of the export.
+    // Name-sorted so the order does not depend on download timing.
+    sheets.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
 
-    for (const f of take) {
+    for (const f of sheets) {
       const isNative = f.mimeType === GOOGLE_SHEET
       const dest = path.join(slot.dir, localName(slot.prefix, f.name, isNative))
       const { converted, bytes } = await download(drive, f, dest)
@@ -229,10 +232,8 @@ const main = async () => {
       )
     }
 
-    if (!slot.keepAll && sheets.length > 1) {
-      console.log(
-        `  ${' '.repeat(9)}   ${sheets.length - 1} older file(s) ignored — newest wins`,
-      )
+    if (sheets.length > 1) {
+      console.log(`  ${' '.repeat(9)}   ${sheets.length} files — these are combined into one table`)
     }
   }
 

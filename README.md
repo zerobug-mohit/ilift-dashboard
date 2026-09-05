@@ -143,12 +143,21 @@ Three subfolders, named exactly:
 
 | Subfolder | What goes in | Behaviour |
 |---|---|---|
-| `ris/` | RIS Hub raw export (.csv) | Newest file wins — the export is cumulative |
-| `crd_mis/` | CRD MIS raw export (.csv) | Newest file wins |
-| `nikshay/` | Nikshay quarterly files | All kept; they accumulate |
+| `ris/` | RIS Hub raw export (.csv) | All files combined into one table |
+| `crd_mis/` | CRD MIS raw export (.csv) | All files combined |
+| `nikshay/` | Nikshay quarterly files | All files combined |
 
-That mirrors the replace/accumulate rules the upload endpoint applies
-(`uploads.R:65-73`), so both routes produce identical numbers.
+**A source may be split across several files.** An export too large to download
+in one go can be saved as `ris1.csv`, `ris2.csv`, `ris3.csv` — every file in the
+folder is read and stacked into one table, matched by column name so each
+header is honoured once and never becomes a data row. Splitting an export and
+recombining it produces exactly what the single file produced.
+
+Rows identical across files are dropped, so re-uploading the same chunk is
+harmless. A record *amended* between two exports is not an identical row, so
+both versions survive and the earlier one wins — ingest says so when it
+happens. If you are keeping successive full exports rather than chunks of one,
+leave only the latest in the folder.
 
 Files may be `.csv`, `.xlsx` or Google Sheets. Upload the **raw** exports —
 the Logic sheet is computed in R (see above), so there is no Excel step.
