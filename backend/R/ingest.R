@@ -17,6 +17,83 @@ suppressPackageStartupMessages({
 #' TRUE when a source file is a CSV rather than a workbook.
 is_csv <- function(path) grepl("\\.csv$", path, ignore.case = TRUE)
 
+#' Parse a column of dates without silently inventing a year.
+#'
+#' RIS Hub exports ISO dates ("2025-08-30"). Opening that CSV in Excel and
+#' saving it rewrites them in the local convention ("30-08-2025"), and
+#' base::as.Date() then reads "30" as the year and returns 0030-08-20 — a valid
+#' Date, centuries out, with no warning. Every row silently falls outside the
+#' project window and the dashboard reports no data.
+#'
+#' So the format is detected rather than assumed, and anything undecidable is
+#' refused rather than guessed at.
+#'
+#' @return list(dates, format, note)
+parse_dates <- function(x, what = "date") {
+  if (inherits(x, "Date"))   return(list(dates = x, format = "already a Date", note = NULL))
+  if (inherits(x, "POSIXt")) return(list(dates = as.Date(x), format = "already a timestamp", note = NULL))
+
+  s <- trimws(as.character(x))
+  s[s == "" | s == "0"] <- NA_character_
+  present <- s[!is.na(s)]
+  if (length(present) == 0) {
+    return(list(dates = as.Date(rep(NA, length(s))), format = "none (all blank)", note = NULL))
+  }
+
+  # Day-first and month-first are indistinguishable for a value like 03/04/2025.
+  # The first component exceeding 12 proves day-first; the second proves
+  # month-first. Deciding from the whole column, not row by row, keeps one file
+  # on one interpretation.
+  parts <- regmatches(present, regexpr("^(\\d{1,4})[-/](\\d{1,2})[-/](\\d{1,4})", present))
+  first  <- suppressWarnings(as.integer(sub("^(\\d{1,4}).*$", "\\1", parts)))
+  second <- suppressWarnings(as.integer(sub("^\\d{1,4}[-/](\\d{1,2}).*$", "\\1", parts)))
+
+  four_digit_first <- any(nchar(sub("^(\\d{1,4}).*$", "\\1", parts)) == 4, na.rm = TRUE)
+  day_first   <- any(first > 12, na.rm = TRUE) && !four_digit_first
+  month_first <- any(second > 12, na.rm = TRUE)
+
+  note <- NULL
+  if (day_first && month_first) {
+    stop(what, ": the dates are not in one consistent format — some rows read as ",
+         "day-first and others as month-first. Re-export the file rather than ",
+         "letting the dashboard choose.", call. = FALSE)
+  }
+
+  candidates <- if (four_digit_first) {
+    c("%Y-%m-%d", "%Y/%m/%d")
+  } else if (month_first) {
+    c("%m-%d-%Y", "%m/%d/%Y")
+  } else {
+    # Day-first either proven, or assumed: these exports are Indian and every
+    # ambiguous file seen so far has been day-first. Flagged when unproven.
+    if (!day_first) {
+      note <- paste0(
+        "every date is ambiguous (no day above 12), so day-first was assumed — ",
+        "if these are US-format dates the months and days are transposed"
+      )
+    }
+    c("%d-%m-%Y", "%d/%m/%Y")
+  }
+
+  best <- NULL; best_ok <- -1; best_fmt <- NA_character_
+  for (fmt in c(candidates, "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d")) {
+    d  <- suppressWarnings(as.Date(s, format = fmt))
+    ok <- sum(!is.na(d))
+    if (ok > best_ok) { best <- d; best_ok <- ok; best_fmt <- fmt }
+    if (ok == length(present)) break
+  }
+
+  failed <- sum(!is.na(s) & is.na(best))
+  if (failed > 0) {
+    message("[ingest] ", what, ": ", format(failed, big.mark = ","), " of ",
+            format(length(present), big.mark = ","),
+            " values could not be read as dates (format ", best_fmt, ")")
+  }
+  if (!is.null(note)) message("[ingest] ", what, ": ", note)
+
+  list(dates = best, format = best_fmt, note = note)
+}
+
 #' Read one table from a source file, whatever its format.
 #'
 #' RIS Hub and the CRD MIS both export CSV directly. A CSV holds a single table,
@@ -236,13 +313,34 @@ ingest_ris <- function() {
   # on, so resolving against the frame once these exist reports an ambiguity
   # that never affected the real mapping. Use bundle$ris$map / $diagnostics
   # rather than re-resolving.
-  L$camp_date <- suppressWarnings(as.Date(fld(L, map, "camp_date")))
+  parsed      <- parse_dates(fld(L, map, "camp_date"), what = "camp date")
+  L$camp_date <- parsed$dates
   L$ym        <- format(L$camp_date, "%Y-%m")
   L$bid       <- as.character(fld(L, map, "beneficiary_id"))
   L$gender    <- trimws(as.character(fld(L, map, "gender")))
 
   # Same filter as calc_v2.R:33 — project window, valid beneficiary
+  before_filter <- nrow(L)
   L <- L[!is.na(L$camp_date) & L$camp_date >= CONFIG$project_start & !is.na(L$bid), ]
+
+  # Losing every row to the window filter is nearly always a date-format
+  # problem, not an empty export. Saying so here beats "no data loaded" three
+  # steps later, which describes the symptom and not the cause.
+  if (nrow(L) == 0 && before_filter > 0) {
+    stop(
+      "Every one of the ", format(before_filter, big.mark = ","),
+      " rows was filtered out, so there is nothing to report.\n",
+      "  Dates were read using the format '", parsed$format, "'.\n",
+      "  Parsed range: ", format(min(parsed$dates, na.rm = TRUE)), " to ",
+      format(max(parsed$dates, na.rm = TRUE)), "\n",
+      "  Project window starts: ", format(CONFIG$project_start), "\n\n",
+      "  If that parsed range looks centuries wrong, the file's dates are in a\n",
+      "  different format from the one detected — most often because the CSV was\n",
+      "  opened and re-saved in Excel. Re-download the export from RIS Hub and\n",
+      "  upload it without opening it.",
+      call. = FALSE
+    )
+  }
 
   # Expert Referral, from the RAW sheet (calc_v2.R:420-430).
   #
@@ -267,7 +365,7 @@ ingest_ris <- function() {
       if (is_csv(path)) {
         keep <- !is.na(RAW[[bid_col]])
       } else {
-        RAW$camp_date <- suppressWarnings(as.Date(RAW[[2]]))
+        RAW$camp_date <- parse_dates(RAW[[2]], what = "RAW sheet date")$dates
         keep <- !is.na(RAW$camp_date) & RAW$camp_date >= CONFIG$project_start &
                 !is.na(RAW[[bid_col]])
       }
@@ -333,7 +431,7 @@ ingest_crd <- function() {
     opd_rows <- CRD[!is.na(CRD$`Beneficiary ID`) &
                     trimws(as.character(CRD$`Beneficiary ID`)) == "OPD", ]
     if (nrow(opd_rows) > 0) {
-      opd_rows$opd_ym <- format(suppressWarnings(as.Date(opd_rows[[date_col]])), "%Y-%m")
+      opd_rows$opd_ym <- format(parse_dates(opd_rows[[date_col]], what = "CRD facility visit date")$dates, "%Y-%m")
     }
   }
 
