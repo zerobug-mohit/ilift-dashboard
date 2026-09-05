@@ -14,13 +14,99 @@ suppressPackageStartupMessages({
   library(readxl)
 })
 
+#' TRUE when a source file is a CSV rather than a workbook.
+is_csv <- function(path) grepl("\\.csv$", path, ignore.case = TRUE)
+
+#' Read one table from a source file, whatever its format.
+#'
+#' RIS Hub and the CRD MIS both export CSV directly. A CSV holds a single table,
+#' so `sheet` is meaningful only for workbooks and is ignored otherwise —
+#' the caller gets the one table the file contains.
+#'
+#' check.names = FALSE matters: the schema resolves columns by their real
+#' headers ("Beneficiary ID", "Camp ID"), and R's default name-mangling would
+#' turn those into "Beneficiary.ID" and break every lookup.
+read_source_table <- function(path, sheet = NULL) {
+  if (is_csv(path)) {
+    d <- read.csv(path, check.names = FALSE, stringsAsFactors = FALSE,
+                  na.strings = c("", "NA"))
+    # readxl names unlabelled columns "...31"; read.csv leaves them empty, which
+    # dplyr::select() rejects outright. Match readxl so both paths behave alike.
+    blank <- is.na(names(d)) | trimws(names(d)) == ""
+    names(d)[blank] <- paste0("...", which(blank))
+    d
+  } else if (is.null(sheet)) {
+    suppressWarnings(read_excel(path))
+  } else {
+    suppressWarnings(read_excel(path, sheet = sheet))
+  }
+}
+
+# Flags that exist only on the Excel-computed "Logic sheet". The raw RIS Hub
+# export carries none of them — it has the observations they are derived from,
+# not the derivations.
+LOGIC_SHEET_FIELDS <- c(
+  "symptomatic", "vulnerable", "eligible_sputum", "sputum_tested",
+  "mb_positive", "tb", "tb_presumptive", "crd_presumptive", "crd_diagnosed",
+  "facility_visited", "spiro_done",
+  "cxr_norm_sp", "cxr_tb_sp", "cxr_oca_sp", "cxr_norm_sn", "cxr_tb_sn", "cxr_oca_sn"
+)
+
+#' Refuse a file that is clearly not the Logic sheet.
+#'
+#' resolve_schema() falls back to column position when a header cannot be
+#' matched. On the Logic sheet that is a reasonable safety net: the layout is
+#' fixed, so position is a good second guess. On any other file it is actively
+#' dangerous — feeding the raw export in maps `symptomatic` onto
+#' "Fibrosis Detection (%)" and every downstream figure becomes confident
+#' nonsense.
+#'
+#' A warning is not enough here. This rebuild exists because the old dashboard
+#' reported wrong numbers without saying so, and publishing garbage behind an
+#' orange banner would repeat exactly that.
+assert_is_logic_sheet <- function(res, path) {
+  # diagnostics is an unnamed list of records, each carrying its own `field`.
+  how_by_field <- setNames(
+    vapply(res$diagnostics, function(d) d$how, character(1)),
+    vapply(res$diagnostics, function(d) d$field, character(1))
+  )
+
+  # "position only" means no header matched at all; "MISSING" means the file is
+  # too narrow to even guess. Both mean the flag was not found by name.
+  by_position <- vapply(
+    LOGIC_SHEET_FIELDS,
+    function(f) {
+      h <- how_by_field[[f]]
+      !is.null(h) && h %in% c("position only (no header match)", "MISSING")
+    },
+    logical(1)
+  )
+
+  n_bad <- sum(by_position)
+  if (n_bad <= length(LOGIC_SHEET_FIELDS) / 2) return(invisible(TRUE))
+
+  stop(
+    "This does not look like the RIS Logic sheet.\n",
+    "  File: ", basename(path), "\n",
+    "  ", n_bad, " of ", length(LOGIC_SHEET_FIELDS),
+    " computed flags could not be found by name, including:\n",
+    "    ", paste(utils::head(names(by_position)[by_position], 5), collapse = ", "), "\n\n",
+    "  The raw RIS Hub export contains the observations but not the flags the\n",
+    "  dashboard needs. Paste it into the Excel template that computes the\n",
+    "  Logic sheet, and upload that workbook instead.\n\n",
+    "  Refusing rather than guessing: matching those columns by position would\n",
+    "  produce figures that look plausible and are wrong.",
+    call. = FALSE
+  )
+}
+
 #' Read the RIS workbook: Logic sheet + RAW sheet, filtered to the project window.
 ingest_ris <- function() {
   path <- find_source("ris")
   if (is.null(path)) stop("No RIS export found in ", CONFIG$incoming_dir,
                           ". Expected a file matching 'ris*.xlsx'.")
 
-  L <- suppressWarnings(read_excel(path, sheet = CONFIG$sheet_logic))
+  L <- read_source_table(path, CONFIG$sheet_logic)
 
   # Resolve columns by header, not blind position (see schema.R)
   res <- resolve_schema(L)
@@ -32,6 +118,8 @@ ingest_ris <- function() {
     for (w in warns) message("  - ", w)
   }
 
+  assert_is_logic_sheet(res, path)
+
   L$camp_date <- suppressWarnings(as.Date(fld(L, map, "camp_date")))
   L$ym        <- format(L$camp_date, "%Y-%m")
   L$bid       <- as.character(fld(L, map, "beneficiary_id"))
@@ -40,20 +128,42 @@ ingest_ris <- function() {
   # Same filter as calc_v2.R:33 — project window, valid beneficiary
   L <- L[!is.na(L$camp_date) & L$camp_date >= CONFIG$project_start & !is.na(L$bid), ]
 
-  # RAW sheet — Expert Referral (calc_v2.R:420-430)
+  # Expert Referral, from the RAW sheet (calc_v2.R:420-430).
+  #
+  # A CSV export has no second tab, but it carries the same columns — so the
+  # table already read serves as both. Resolving "Expert Referral" and
+  # "Beneficiary ID" by header rather than by position (169 and 50) means a
+  # column inserted upstream shifts nothing.
   raw_expref_bids <- character(0)
   raw_ok <- TRUE
   tryCatch({
-    RAW <- suppressWarnings(read_excel(path, sheet = CONFIG$sheet_raw))
-    RAW$camp_date <- suppressWarnings(as.Date(RAW[[2]]))
-    RAW <- RAW[!is.na(RAW$camp_date) & RAW$camp_date >= CONFIG$project_start & !is.na(RAW[[50]]), ]
-    if (ncol(RAW) >= 169) {
-      flg <- RAW[[169]] %in% c("Immediate referral", "Deferred referral")
-      raw_expref_bids <- unique(as.character(RAW[[50]][flg]))
+    RAW <- if (is_csv(path)) L else read_source_table(path, CONFIG$sheet_raw)
+
+    ref_col <- if (is_csv(path)) {
+      grep("^Expert Referral$", colnames(RAW), ignore.case = TRUE)[1]
+    } else if (ncol(RAW) >= 169) 169L else NA_integer_
+
+    bid_col <- if (is_csv(path)) {
+      grep("^Beneficiary ID$", colnames(RAW), ignore.case = TRUE)[1]
+    } else 50L
+
+    if (!is.na(ref_col) && !is.na(bid_col)) {
+      if (is_csv(path)) {
+        keep <- !is.na(RAW[[bid_col]])
+      } else {
+        RAW$camp_date <- suppressWarnings(as.Date(RAW[[2]]))
+        keep <- !is.na(RAW$camp_date) & RAW$camp_date >= CONFIG$project_start &
+                !is.na(RAW[[bid_col]])
+      }
+      flg <- keep & RAW[[ref_col]] %in% c("Immediate referral", "Deferred referral")
+      raw_expref_bids <- unique(as.character(RAW[[bid_col]][flg]))
+    } else {
+      raw_ok <- FALSE
+      message("[ingest] no Expert Referral column found — those metrics will be zero.")
     }
   }, error = function(e) {
     raw_ok <<- FALSE
-    message("[ingest] RAW sheet unavailable (", conditionMessage(e),
+    message("[ingest] RAW data unavailable (", conditionMessage(e),
             ") — expert-referral metrics will be zero.")
   })
 
@@ -81,7 +191,7 @@ ingest_crd <- function() {
                 present = FALSE, path = NULL, n_rows = 0))
   }
 
-  CRD <- suppressWarnings(read_excel(path, sheet = CONFIG$sheet_crd))
+  CRD <- read_source_table(path, CONFIG$sheet_crd)
 
   # The export ships a duplicated ID header and stray unnamed columns
   if ("Beneficiary ID...1" %in% colnames(CRD)) {
@@ -124,7 +234,7 @@ ingest_nikshay <- function() {
   }
 
   frames <- lapply(paths, function(p) {
-    tryCatch(suppressWarnings(read_excel(p)), error = function(e) {
+    tryCatch(read_source_table(p), error = function(e) {
       message("[ingest] could not read ", basename(p), ": ", conditionMessage(e)); NULL
     })
   })

@@ -49,10 +49,13 @@ CONFIG <- local({
 # ── Expected filenames in the watched incoming/ folder ───────────────────────
 # Matched case-insensitively by prefix so dated exports work without renaming
 # (e.g. "ris_2026-08-14.xlsx" matches the "ris" pattern).
+# RIS Hub and the CRD MIS export CSV; the Excel workbooks are the same data
+# pasted into a template. Both are accepted so neither route needs a conversion
+# step — see read_source_table() in ingest.R.
 SOURCE_PATTERNS <- list(
-  ris     = "^ris.*\\.xlsx?$",
-  crd_mis = "^crd.*\\.xlsx?$",
-  nikshay = "^.*\\.xlsx?$"   # inside incoming/nikshay/
+  ris     = "^ris.*\\.(xlsx?|csv)$",
+  crd_mis = "^crd.*\\.(xlsx?|csv)$",
+  nikshay = "^.*\\.(xlsx?|csv)$"   # inside incoming/nikshay/
 )
 
 #' Locate a source file in the incoming folder by pattern.

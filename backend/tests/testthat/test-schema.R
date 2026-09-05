@@ -70,3 +70,31 @@ test_that("weekly coordinates come from named headers, not positions 73/74", {
     expect_true(c$lon > 79 && c$lon < 85)
   }
 })
+
+test_that("the raw RIS export is refused rather than guessed at", {
+  # A file with none of the computed flags — the shape of the raw RIS Hub
+  # export, which carries observations but not the Logic sheet's derivations.
+  # resolve_schema() would fall back to position and map `symptomatic` onto
+  # whatever column happens to sit at that index, so ingest must stop.
+  raw_like <- as.data.frame(
+    setNames(
+      lapply(seq_len(183), function(i) rep(NA, 2)),
+      paste0("Raw Column ", seq_len(183))
+    ),
+    check.names = FALSE
+  )
+
+  res <- resolve_schema(raw_like)
+  expect_error(
+    assert_is_logic_sheet(res, "beneficiary_export_20260101.csv"),
+    "does not look like the RIS Logic sheet"
+  )
+})
+
+test_that("a genuine Logic sheet passes the same guard", {
+  # The fixtures are built to mirror the Logic sheet, so this is the
+  # counterpart: the guard must not fire on the file the dashboard expects.
+  bundle <- test_bundle()
+  res <- resolve_schema(bundle$ris$logic)
+  expect_true(assert_is_logic_sheet(res, "ris_fixture.xlsx"))
+})

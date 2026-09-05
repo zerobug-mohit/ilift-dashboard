@@ -127,10 +127,17 @@ async function download(drive, file, dest) {
   return { converted: isNative, bytes: statSync(dest).size }
 }
 
-/** Make a Drive filename safe on disk and matchable by find_source(). */
-function localName(prefix, name) {
-  const base = name.replace(/\.(xlsx|xls)$/i, '').replace(/[^A-Za-z0-9._-]+/g, '_')
-  return `${prefix}${base}.xlsx`
+/**
+ * Make a Drive filename safe on disk and matchable by find_source().
+ *
+ * The extension is preserved rather than forced: RIS Hub and the CRD MIS both
+ * export CSV, and read_source_table() dispatches on it. Renaming a CSV to
+ * .xlsx would make readxl fail on a file it cannot parse.
+ */
+function localName(prefix, name, isNativeSheet) {
+  const ext = isNativeSheet ? 'xlsx' : (name.match(/\.(xlsx|xls|csv)$/i)?.[1]?.toLowerCase() ?? 'xlsx')
+  const base = name.replace(/\.(xlsx|xls|csv)$/i, '').replace(/[^A-Za-z0-9._-]+/g, '_')
+  return `${prefix}${base}.${ext}`
 }
 
 const main = async () => {
@@ -179,7 +186,7 @@ const main = async () => {
   const clearWorkbooks = (dir) => {
     if (!existsSync(dir)) return
     for (const name of readdirSync(dir)) {
-      if (/\.(xlsx|xls)$/i.test(name)) rmSync(path.join(dir, name), { force: true })
+      if (/\.(xlsx|xls|csv)$/i.test(name)) rmSync(path.join(dir, name), { force: true })
     }
   }
   mkdirSync(INCOMING, { recursive: true })
@@ -199,7 +206,7 @@ const main = async () => {
 
     const all = await listChildren(drive, folder.id)
     const sheets = all.filter(
-      (f) => f.mimeType === GOOGLE_SHEET || /\.(xlsx|xls)$/i.test(f.name),
+      (f) => f.mimeType === GOOGLE_SHEET || /\.(xlsx|xls|csv)$/i.test(f.name),
     )
 
     if (sheets.length === 0) {
@@ -212,7 +219,8 @@ const main = async () => {
     const take = slot.keepAll ? sheets : [sheets[0]]
 
     for (const f of take) {
-      const dest = path.join(slot.dir, localName(slot.prefix, f.name))
+      const isNative = f.mimeType === GOOGLE_SHEET
+      const dest = path.join(slot.dir, localName(slot.prefix, f.name, isNative))
       const { converted, bytes } = await download(drive, f, dest)
       fetched++
       console.log(
@@ -236,7 +244,9 @@ const main = async () => {
   }
 
   // RIS is the only source the dashboard cannot do without.
-  const haveRis = readdirSync(INCOMING).some((f) => /^ris.*\.xlsx?$/i.test(f))
+  // Must match SOURCE_PATTERNS$ris in config.R, or a file lands here and the
+  // dashboard still reports no data.
+  const haveRis = readdirSync(INCOMING).some((f) => /^ris.*\.(xlsx?|csv)$/i.test(f))
   if (!haveRis) {
     fail(
       'No RIS export was found — the dashboard cannot compute anything without it.',
