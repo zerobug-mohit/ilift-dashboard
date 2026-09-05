@@ -170,8 +170,9 @@ export default function App() {
 function SupportLine({ standalone = false }: { standalone?: boolean }) {
   return (
     <div className={standalone ? 'support support-alone' : 'support'}>
-      For support, reach out to developer at{' '}
-      <a href="mailto:mchaurasiya@wjcf.in">mchaurasiya@wjcf.in</a>
+      For support, reach out to developers at{' '}
+      <a href="mailto:mchaurasiya@wjcf.in">mchaurasiya@wjcf.in</a> or{' '}
+      <a href="mailto:tchandra@wjcf.in">tchandra@wjcf.in</a>
     </div>
   )
 }
