@@ -88,6 +88,10 @@ export default function App() {
         </div>
       </header>
 
+      {/* Also shown when the dashboard cannot load — that is precisely when
+          someone needs to know who to contact. */}
+      {(meta.isError || (meta.data && months.length === 0)) && <SupportLine standalone />}
+
       {meta.isLoading && (
         <div className="state"><p>Loading…</p></div>
       )}
@@ -147,9 +151,27 @@ export default function App() {
             <div style={{ marginTop: 4 }}>
               Totals are deduplicated across the selected range.
             </div>
+            {/* Rendered below the tab content, so it is present on every tab. */}
+            <SupportLine />
           </footer>
         </>
       )}
     </>
+  )
+}
+
+/**
+ * Who to contact when something is wrong.
+ *
+ * Rendered under the footer on every tab, and on its own when the dashboard
+ * fails to load or has no data — the states where a reader most needs it and
+ * where the footer does not render.
+ */
+function SupportLine({ standalone = false }: { standalone?: boolean }) {
+  return (
+    <div className={standalone ? 'support support-alone' : 'support'}>
+      For support, reach out to developer at{' '}
+      <a href="mailto:mchaurasiya@wjcf.in">mchaurasiya@wjcf.in</a>
+    </div>
   )
 }

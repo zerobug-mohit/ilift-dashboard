@@ -10,13 +10,17 @@
   --grn:#375623;  --lgrn:#A9D18E; --vlgrn:#E2EFDA;
   --prp:#7030A0;  --lprp:#E2CFEE; --tel:#00B050;
   --grey:#595959; --bg:#F4F6FA;   --bdr:#D6D6D6;
+
+  /* Trebuchet is a Microsoft core font, so it is present on Windows and macOS.
+     The fallbacks are the closest humanist sans faces on machines without it. */
+  --font: "Trebuchet MS", "Lucida Grande", "Lucida Sans Unicode", Tahoma, Verdana, sans-serif;
   --red:#C00000;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: Arial, sans-serif;
+  font-family: var(--font);
   background: var(--bg);
   color: #333;
   font-size: 13px;
@@ -44,11 +48,11 @@ header .sub { font-size: 11px; opacity: .75; margin-top: 2px; }
 .filter-bar label { font-size: 11px; font-weight: 700; color: var(--navy); }
 .filter-bar input[type=month], .filter-bar select {
   border: 1.5px solid var(--blue); border-radius: 4px; padding: 5px 9px;
-  font-size: 11px; color: var(--navy); font-family: Arial; outline: none; background: #fff;
+  font-size: 11px; color: var(--navy); font-family: var(--font); outline: none; background: #fff;
 }
 .btn-r {
   background: var(--navy); color: #fff; border: none; padding: 5px 14px;
-  border-radius: 4px; font-size: 11px; cursor: pointer; font-family: Arial;
+  border-radius: 4px; font-size: 11px; cursor: pointer; font-family: var(--font);
 }
 .btn-r:hover { background: var(--blue); }
 .btn-r:disabled { opacity: .55; cursor: default; }
@@ -63,7 +67,7 @@ header .sub { font-size: 11px; opacity: .75; margin-top: 2px; }
   padding: 11px 20px; font-size: 13px; font-weight: 700; border: none;
   background: none; cursor: pointer; color: var(--grey);
   border-bottom: 4px solid transparent; margin-bottom: -3px;
-  font-family: Arial; white-space: nowrap;
+  font-family: var(--font); white-space: nowrap;
 }
 .mt.on { color: var(--navy); border-bottom-color: var(--navy); }
 .mt:hover { color: var(--navy); }
@@ -76,7 +80,7 @@ header .sub { font-size: 11px; opacity: .75; margin-top: 2px; }
   padding: 8px 16px; font-size: 12px; font-weight: 600; border: none;
   background: none; cursor: pointer; color: var(--grey);
   border-bottom: 3px solid transparent; margin-bottom: -2px;
-  font-family: Arial; white-space: nowrap;
+  font-family: var(--font); white-space: nowrap;
 }
 .st.on { color: var(--blue); border-bottom-color: var(--blue); }
 .st:hover { color: var(--blue); }
@@ -153,14 +157,14 @@ tbody td { padding: 6px 9px; border-bottom: 1px solid var(--bdr); }
 .dl-btn {
   background: #fff; color: var(--navy); border: 1.5px solid var(--navy);
   padding: 3px 10px; border-radius: 4px; font-size: 10px; cursor: pointer;
-  font-family: Arial; font-weight: 700; white-space: nowrap;
+  font-family: var(--font); font-weight: 700; white-space: nowrap;
 }
 .dl-btn:hover { background: var(--navy); color: #fff; }
 
 .chip {
   border: 1.5px solid var(--blue); background: #fff; color: var(--navy);
   border-radius: 14px; padding: 4px 12px; font-size: 11px; cursor: pointer;
-  font-family: Arial; font-weight: 600;
+  font-family: var(--font); font-weight: 600;
 }
 .chip.on { background: var(--blue); color: #fff; }
 
@@ -259,3 +263,21 @@ footer .prov { color: var(--grey); }
 .ug-faq dd {
   margin: 3px 0 0; font-size: 11.5px; color: var(--grey); line-height: 1.75;
 }
+
+/* Support line — sits under the provenance footer on every tab, separated by a
+   rule so it reads as contact detail rather than another data caveat. */
+footer .support {
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--bdr);
+  color: var(--grey);
+}
+footer .support a { color: var(--blue); text-decoration: none; }
+footer .support a:hover { text-decoration: underline; }
+
+/* Standalone: no footer above it to hang off, so it carries its own spacing. */
+.support-alone {
+  text-align: center; font-size: 10px; color: var(--grey);
+  padding: 14px; border-top: none; margin-top: 0;
+}
+.support-alone a { color: var(--blue); text-decoration: none; }
+.support-alone a:hover { text-decoration: underline; }
