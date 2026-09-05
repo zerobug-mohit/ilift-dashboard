@@ -33,9 +33,15 @@ test_that("Excel lock files are rejected", {
   expect_null(safe_filename("~$Offline_iLIFT_Dashboard.xlsx"))
 })
 
-test_that("base::basename would have mangled the lock-file marker", {
+test_that("base::basename would have mangled the lock-file marker on Windows", {
   # Documents why safe_filename() strips paths with a regex instead.
   # If this ever stops being true, the custom stripping can be reconsidered.
+  #
+  # Windows-only: tilde expansion happens there but not on Linux, where
+  # basename("~$lock.xlsx") returns the string unchanged. The behaviour that
+  # actually matters — safe_filename() rejecting these — is asserted above on
+  # every platform, so skipping here loses no coverage.
+  skip_if_not(.Platform$OS.type == "windows", "tilde expansion is Windows-only")
   expect_false(startsWith(basename("~$lock.xlsx"), "~$"))
 })
 
