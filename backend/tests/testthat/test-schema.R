@@ -98,3 +98,44 @@ test_that("a genuine Logic sheet passes the same guard", {
   res <- resolve_schema(bundle$ris$logic)
   expect_true(assert_is_logic_sheet(res, "ris_fixture.xlsx"))
 })
+
+test_that("every field resolves by header name, never by position", {
+  # The positional fallback exists as a safety net, not as a working mode: it is
+  # what mapped `symptomatic` onto "Fibrosis Detection (%)" when the raw export
+  # was first fed in. On a file the dashboard supports, nothing should need it.
+  #
+  # Asserted against the diagnostics ingest recorded, not a fresh resolve:
+  # ingest_ris() appends helper columns (bid, ym, gender, camp_date) *after*
+  # resolving, so re-resolving afterwards sees a second column called "gender"
+  # and reports an ambiguity that never affected the real mapping.
+  bundle <- test_bundle()
+  diags <- bundle$ris$diagnostics
+
+  fell_back <- Filter(
+    function(d) d$how %in% c("position only (no header match)", "MISSING"),
+    diags
+  )
+  expect_equal(vapply(fell_back, function(d) d$field, character(1)), character(0))
+  expect_length(bundle$ris$warnings, 0)
+})
+
+test_that("the two area fields resolve to different columns", {
+  # "Camp Area Type" holds the camp's kind (Mining area, Urban slum, PVTG);
+  # "Area Classification" holds Tribal/Rural/Urban. An earlier pattern matched
+  # both to the same column, which silently emptied the Mining area cohort.
+  bundle <- test_bundle()
+  expect_false(identical(bundle$ris$map$camp_area_type,
+                         bundle$ris$map$area_classification))
+})
+
+test_that("a moved column is not reported as a problem", {
+  # "name (position differs)" means the header matched and the column has simply
+  # moved — the outcome resolving by name exists to produce. Reporting it buried
+  # the cases that matter in noise.
+  df <- data.frame(Filler = 1, `Camp ID` = "C1", check.names = FALSE)
+  res <- resolve_schema(df, schema = list(
+    camp_id = list(idx = 99, pat = "^camp\\s*id", type = "chr")
+  ))
+  expect_equal(res$diagnostics[[1]]$how, "name (position differs)")
+  expect_length(schema_warnings(res), 0)
+})

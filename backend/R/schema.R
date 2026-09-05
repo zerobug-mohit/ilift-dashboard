@@ -23,21 +23,32 @@
 # field name -> list(idx = legacy position, pat = header regex, type = expected)
 LOGIC_SCHEMA <- list(
   camp_id            = list(idx = 1,   pat = "^camp\\s*id",                    type = "chr"),
-  camp_date          = list(idx = 2,   pat = "camp.*(creation)?.*date",        type = "date"),
+  # Anchored so "Camp Last Update Date" cannot win.
+  camp_date          = list(idx = 2,   pat = "camp\\s*creation\\s*date",       type = "date"),
   camp_district      = list(idx = 6,   pat = "district",                       type = "chr"),
-  camp_area_type     = list(idx = 11,  pat = "(camp)?.*area.*type|mining",     type = "chr"),
-  area_classification= list(idx = 14,  pat = "tribal|rural|urban|classificat", type = "chr"),
+  # Two spellings of the same field: the Logic sheet says "Camp Area Type",
+  # the raw export "Type of Camp". Anchored so plain "Area Type" — a different
+  # column entirely — cannot match.
+  camp_area_type     = list(idx = 11,  pat = "^camp\\s*area\\s*type$|^type\\s*of\\s*camp$",
+                                                                               type = "chr"),
+  # Likewise "Area Classification" (Logic sheet) vs "Area Type" (raw export).
+  area_classification= list(idx = 14,  pat = "^area\\s*classification$|^area\\s*type$",
+                                                                               type = "chr"),
 
   beneficiary_id     = list(idx = 50,  pat = "beneficiary\\s*id",              type = "chr"),
-  age                = list(idx = 52,  pat = "^age",                           type = "num"),
-  gender             = list(idx = 54,  pat = "^(gender|sex)",                  type = "chr"),
+  age                = list(idx = 52,  pat = "^(beneficiary\\s*)?age$",        type = "num"),
+  gender             = list(idx = 54,  pat = "^(beneficiary\\s*)?(gender|sex)$",
+                                                                               type = "chr"),
   nikshay_id         = list(idx = 56,  pat = "nikshay\\s*id",                  type = "num"),
 
   bmi                = list(idx = 60,  pat = "^bmi",                           type = "num"),
   blood_sugar        = list(idx = 63,  pat = "blood\\s*sugar|rbs",             type = "num"),
-  spo2               = list(idx = 64,  pat = "spo2|oxygen\\s*sat",             type = "num"),
+  # "Test Available: SpO2" is a flag saying the test was offered, not a reading.
+  spo2               = list(idx = 64,  pat = "^spo2$|pulse\\s*oximeter",       type = "num"),
   bp_systolic        = list(idx = 66,  pat = "systolic|blood\\s*pressure",     type = "num"),
-  scd_result         = list(idx = 68,  pat = "sickle|scd",                     type = "chr"),
+  # Requiring "result" separates the reading from "Test Available: Sickle cell
+  # disease" and from the bare "Sickle Cell Disease" risk-factor column.
+  scd_result         = list(idx = 68,  pat = "sickle.*result|^scd.*result",    type = "chr"),
 
   sym_cough          = list(idx = 71,  pat = "cough",                          type = "yn"),
   sym_chest_pain     = list(idx = 72,  pat = "chest\\s*pain",                  type = "yn"),
@@ -48,7 +59,7 @@ LOGIC_SCHEMA <- list(
 
   mmrc_scale         = list(idx = 80,  pat = "mmrc",                           type = "chr"),
   tobacco_any        = list(idx = 83,  pat = "tobacco",                        type = "yn"),
-  smoking            = list(idx = 84,  pat = "smok",                           type = "yn"),
+  smoking            = list(idx = 84,  pat = "smoking",                        type = "yn"),
   alcohol            = list(idx = 85,  pat = "alcohol",                        type = "yn"),
   hh_contact_tb      = list(idx = 86,  pat = "(hh|household).*contact",        type = "yn"),
   past_tb            = list(idx = 87,  pat = "past.*tb|previous.*tb",          type = "yn"),
@@ -56,13 +67,18 @@ LOGIC_SCHEMA <- list(
 
   migrant            = list(idx = 94,  pat = "migrant",                        type = "yn"),
   factory_worker     = list(idx = 95,  pat = "factory",                        type = "yn"),
-  mine_worker        = list(idx = 96,  pat = "mine\\s*worker|mining\\s*work",  type = "yn"),
+  # "(Social) Miner" in the raw export, "Mine Worker" on the Logic sheet.
+  mine_worker        = list(idx = 96,  pat = "mine\\s*worker|mining\\s*work|\\bminer\\b",
+                                                                               type = "yn"),
   healthcare_worker  = list(idx = 97,  pat = "health\\s*care\\s*worker|hcw",   type = "yn"),
 
   xray_taken         = list(idx = 101, pat = "x.?ray.*taken",                  type = "chr"),
   genki_result       = list(idx = 106, pat = "genki|ai.*result",               type = "chr"),
   eptb               = list(idx = 137, pat = "eptb|extra.?pulmonary",          type = "yn"),
-  crd_result         = list(idx = 142, pat = "chronic\\s*respiratory",         type = "chr"),
+  # Anchored: "(Clinical) Existing Chronic Respiratory Disease" is a risk
+  # factor and "Chronic Respiratory Diseases (Other)" a free-text field.
+  crd_result         = list(idx = 142, pat = "^chronic\\s*respiratory\\s*diseases?$",
+                                                                               type = "chr"),
 
   # Flag columns — computed by Excel formulas in Phase 1,
   # computed natively by flags.R in Phase 2.
@@ -148,9 +164,16 @@ resolve_schema <- function(df, schema = LOGIC_SCHEMA, prefer = character(0)) {
 
 #' Report fields that could not be confirmed by header text. Called at ingest
 #' so problems appear in the server log and in GET /api/meta.
+#' Report fields whose column could not be established from the header.
+#'
+#' "name (position differs)" is deliberately not a warning: the header matched,
+#' which is the outcome we want — it only means the column has moved from the
+#' position the legacy scripts assumed, which is precisely what resolving by
+#' name is for. Reporting it trained people to ignore a banner that also
+#' carries the cases that matter.
 schema_warnings <- function(res) {
   bad <- Filter(function(d) d$how %in% c("MISSING", "position only (no header match)") ||
-                            grepl("differs|ambiguous", d$how), res$diagnostics)
+                            grepl("ambiguous", d$how), res$diagnostics)
   lapply(bad, function(d) sprintf("column '%s': %s (using index %s, header '%s')",
                                   d$field, d$how, d$index, d$header))
 }

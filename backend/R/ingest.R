@@ -137,6 +137,11 @@ ingest_ris <- function() {
   # would silently take over again.
   assert_is_logic_sheet(res, path)
 
+  # Helper columns for downstream modules. Appended *after* resolve_schema(),
+  # deliberately: "gender" and "camp_date" duplicate headers the schema matches
+  # on, so resolving against the frame once these exist reports an ambiguity
+  # that never affected the real mapping. Use bundle$ris$map / $diagnostics
+  # rather than re-resolving.
   L$camp_date <- suppressWarnings(as.Date(fld(L, map, "camp_date")))
   L$ym        <- format(L$camp_date, "%Y-%m")
   L$bid       <- as.character(fld(L, map, "beneficiary_id"))
