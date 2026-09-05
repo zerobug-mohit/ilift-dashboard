@@ -66,22 +66,116 @@ invalidates every cached result automatically.
 
 ---
 
+## Refreshing from Google Drive (no local setup)
+
+The normal way the dashboard gets updated. Whoever maintains the data drops the
+exports into a Google Drive folder; GitHub Actions fetches them, recomputes
+every figure, and republishes. **Nothing is installed on their machine** — no R,
+no Node, no terminal.
+
+```
+   Drive folder                GitHub Actions                 GitHub Pages
+   ────────────                ──────────────                 ────────────
+   ris/       ──┐
+   crd_mis/   ──┼──fetch──►  test → compute → build  ──────►  team sees
+   nikshay/   ──┘             (~10 min)                        new figures
+```
+
+### The Drive folder
+
+Three subfolders, named exactly:
+
+| Subfolder | What goes in | Behaviour |
+|---|---|---|
+| `ris/` | RIS Hub export | Newest file wins — the export is cumulative |
+| `crd_mis/` | CRD MIS export | Newest file wins |
+| `nikshay/` | Nikshay quarterly files | All kept; they accumulate |
+
+That mirrors the replace/accumulate rules the upload endpoint applies
+(`uploads.R:65-73`), so both routes produce identical numbers.
+
+Files may be `.xlsx` or Google Sheets — a Sheet is exported to `.xlsx` on the
+way through.
+
+### Updating the data
+
+1. Put the new export in the right subfolder.
+2. **Actions → Refresh dashboard from Drive → Run workflow.**
+3. About ten minutes later the dashboard shows the new figures.
+
+Skipping step 2 is fine — a scheduled run at 06:00 UTC (≈11:30 IST) picks up
+whatever is in Drive. The button only matters when you want it sooner.
+
+### One-time setup
+
+Needs someone with GitHub admin on the repo and permission to create a Google
+Cloud service account. Roughly twenty minutes.
+
+**1. Create a service account**
+
+At <https://console.cloud.google.com>: new project → enable the **Google Drive
+API** → **Credentials → Create credentials → Service account** → open it →
+**Keys → Add key → JSON**. Keep the downloaded file; you paste it in step 3.
+
+**2. Share the Drive folder with it**
+
+Create the folder and its three subfolders, then share the *top* folder with the
+service account's `client_email` (it looks like
+`something@project-id.iam.gserviceaccount.com`). **Viewer** is enough — the
+workflow never writes to Drive.
+
+**3. Add two repository secrets**
+
+**Settings → Secrets and variables → Actions → New repository secret:**
+
+| Secret | Value |
+|---|---|
+| `GDRIVE_SA_KEY` | The entire JSON key file, braces included |
+| `GDRIVE_FOLDER_ID` | From the folder URL: `drive.google.com/drive/folders/`**`<this>`** |
+
+**4. Set the Pages source**
+
+**Settings → Pages → Source: "GitHub Actions".**
+
+Then run the workflow once to confirm it works end to end.
+
+### What this means for the data
+
+The exports contain beneficiary records, so this moves them into Google Drive
+and, briefly, onto a GitHub runner. Worth being deliberate about:
+
+- Use an **organisation** Google account for the Drive folder, not a personal
+  one, so it sits under agreements that already exist.
+- The runner holds the records only between the fetch and the compute. The
+  workflow deletes them immediately afterwards, with `if: always()` so a failed
+  build cannot leave them behind.
+- **Only aggregates are published.** `publish.mjs` refuses to continue if it
+  finds beneficiary-shaped identifiers in its output, and the workflow re-checks
+  independently before uploading, so a change to one guard cannot silently
+  disable the other.
+- The service-account key is a credential to your Drive folder. It lives only in
+  GitHub Secrets; rotate it in the Cloud console if it is ever exposed.
+
+---
+
 ## Which sharing option?
 
-| | Local only | Published snapshot | Deployed server |
-|---|---|---|---|
-| Who can view | one person | anyone with the link | anyone with the password |
-| Cost | free | free | ~$7/mo |
-| Server to run | none | none | one |
-| Where the RIS workbook rests | your machine | **your machine** | the host's disk |
-| Numbers are | live | as of last publish | live |
-| Refresh step | upload in browser | `npm run publish:push` | upload in browser |
-| Password protection | n/a | needs Cloudflare Access | built in |
+| | Drive + Actions | Local only | Publish from a laptop | Deployed server |
+|---|---|---|---|---|
+| Who can view | anyone with the link | one person | anyone with the link | anyone with the password |
+| Cost | free | free | free | ~$7/mo |
+| Needs R/Node installed | **no** | yes | yes | no |
+| Where the RIS workbook rests | Google Drive | your machine | your machine | the host's disk |
+| Numbers are | as of last run | live | as of last publish | live |
+| Refresh step | drop file in Drive | upload in browser | `npm run publish:push` | upload in browser |
+| Password protection | needs Cloudflare Access | n/a | needs Cloudflare Access | built in |
 
-**Published snapshot** is the option with the least to go wrong: no server, no
-cost, and the beneficiary records never leave the machine that publishes. Its
-tradeoff is that figures are current as of the last publish, and static hosting
-cannot check a password on its own.
+**Drive + Actions** is the default, and the only option that asks nothing of the
+person updating the data beyond dropping a file in a folder. See
+[Refreshing from Google Drive](#refreshing-from-google-drive-no-local-setup).
+
+**Publish from a laptop** is the same published output, computed locally instead.
+Useful as a fallback, but it needs R and Node on that machine.
 
 **Deployed server** is right if you need live figures behind a password.
 
@@ -163,13 +257,12 @@ since the JSON is right there in the network tab. If the figures need protecting
 
 ### First-time setup for GitHub Pages
 
-After the first `npm run publish:push`, set the source once:
+Set the source once:
 
-**Settings → Pages → Source: "Deploy from a branch" → Branch: `gh-pages` / (root)**
+**Settings → Pages → Source: "GitHub Actions"**
 
-That replaces the Actions-based workflow, so disable
-`.github/workflows/deploy-pages.yml` if you switch to snapshots — two Pages
-deployments cannot coexist on one repo.
+Publishing from a laptop this way is the fallback. The normal route is the
+Drive workflow below, which needs nothing installed on anyone's machine.
 
 ---
 
