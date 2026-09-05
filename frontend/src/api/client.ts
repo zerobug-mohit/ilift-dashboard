@@ -79,6 +79,16 @@ export interface Filters {
 
 const filterParams = (f: Filters) => ({ from: f.from, to: f.to, gender: f.gender })
 
+/**
+ * A range is only fetchable once both ends are known.
+ *
+ * On first render the filters are still empty, and firing then asked for
+ * `metrics/____all.json` — a 404 on every page load, and in the snapshot build
+ * a request that could never succeed. The real request follows a moment later
+ * once the months arrive.
+ */
+const hasRange = (f: Filters) => Boolean(f.from) && Boolean(f.to)
+
 export function useMeta() {
   return useQuery({
     queryKey: ['meta'],
@@ -94,7 +104,7 @@ export function useMetrics(f: Filters, enabled = true) {
   return useQuery({
     queryKey: ['metrics', f.from, f.to, f.gender],
     queryFn: () => get<MetricsResponse>('/metrics', filterParams(f)),
-    enabled,
+    enabled: enabled && hasRange(f),
     placeholderData: (prev) => prev,   // keep the old numbers visible while refetching
     retry: false,
   })
@@ -104,7 +114,7 @@ export function useNns(f: Filters, enabled = true) {
   return useQuery({
     queryKey: ['nns', f.from, f.to, f.gender],
     queryFn: () => get<NnsResponse>('/nns', filterParams(f)),
-    enabled,
+    enabled: enabled && hasRange(f),
     placeholderData: (prev) => prev,
     retry: false,
   })
@@ -114,7 +124,7 @@ export function useWeekly(f: Filters, enabled = true) {
   return useQuery({
     queryKey: ['weekly', f.from, f.to],
     queryFn: () => get<WeeklyResponse>('/weekly', { from: f.from, to: f.to }),
-    enabled,
+    enabled: enabled && hasRange(f),
     placeholderData: (prev) => prev,
     retry: false,
   })
@@ -124,7 +134,7 @@ export function useSputum(f: Filters, enabled = true) {
   return useQuery({
     queryKey: ['sputum', f.from, f.to, f.gender],
     queryFn: () => get<SputumResponse>('/sputum', filterParams(f)),
-    enabled,
+    enabled: enabled && hasRange(f),
     placeholderData: (prev) => prev,
     retry: false,
   })
