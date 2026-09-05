@@ -10,6 +10,7 @@ import { NcdScdTab } from './features/ncd-scd/NcdScdTab'
 import { OthersTab } from './features/others/OthersTab'
 import { WeeklyReviewTab } from './features/weekly-review/WeeklyReviewTab'
 import { DataManager } from './components/DataManager'
+import { UpdateGuide } from './components/UpdateGuide'
 import { Login, AuthBadge } from './components/Login'
 import { monthLabel } from './components/charts'
 
@@ -19,7 +20,7 @@ const MAIN_TABS = [
   { id: 'ncd',  label: 'NCD / SCD' },
   { id: 'oth',  label: 'Others' },
   { id: 'wr',   label: 'Weekly Review' },
-  { id: 'data', label: 'Data' },
+  { id: 'how', label: 'How to Update' },
 ] as const
 
 type TabId = typeof MAIN_TABS[number]['id']
@@ -134,7 +135,7 @@ export default function App() {
           {tab === 'ncd'  && <NcdScdTab filters={filters} months={activeMonths} />}
           {tab === 'oth'  && <OthersTab filters={filters} months={activeMonths} />}
           {tab === 'wr'   && <WeeklyReviewTab filters={filters} />}
-          {tab === 'data' && <DataManager meta={meta.data} isAdmin={isAdmin} />}
+          {tab === 'how'  && <UpdateGuide meta={meta.data} />}
 
           <footer>
             <div className="prov">

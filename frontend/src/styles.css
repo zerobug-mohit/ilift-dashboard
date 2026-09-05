@@ -196,3 +196,66 @@ tbody td { padding: 6px 9px; border-bottom: 1px solid var(--bdr); }
 
 footer { text-align: center; padding: 16px; font-size: 10px; color: #aaa; }
 footer .prov { color: var(--grey); }
+
+/* ── How to Update tab ─────────────────────────────────────────────────────
+   Replaced the Data tab: uploading moved to Google Drive, so the dashboard
+   explains the routine instead of offering controls that no longer apply. */
+.ug-card {
+  background: #fff; padding: 14px 16px; border-radius: 0 0 7px 7px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+
+/* The "are these current?" answer, before any instructions. */
+.ug-stamp {
+  display: flex; flex-wrap: wrap; gap: 26px;
+  padding-bottom: 12px; margin-bottom: 10px; border-bottom: 1px solid var(--bdr);
+}
+.ug-stamp > div { display: flex; flex-direction: column; gap: 2px; }
+.ug-stamp strong { font-size: 14px; color: var(--navy); font-variant-numeric: tabular-nums; }
+.ug-lab {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--grey);
+}
+
+.ug-note { font-size: 11px; color: var(--grey); line-height: 1.7; margin: 0; }
+.ug-warn {
+  font-size: 11px; line-height: 1.7; margin: 8px 0 0;
+  background: var(--llorg); border-left: 3px solid var(--org);
+  padding: 8px 11px; border-radius: 0 4px 4px 0; color: #7a3708;
+}
+
+/* Numbered steps: the order is the instruction, so it is encoded, not decorative. */
+.ug-steps { list-style: none; margin: 0; padding: 0; counter-reset: ugstep; }
+.ug-steps > li {
+  counter-increment: ugstep; position: relative;
+  padding-left: 34px; padding-bottom: 16px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--bdr);
+}
+.ug-steps > li:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+.ug-steps > li::before {
+  content: counter(ugstep);
+  position: absolute; left: 0; top: 0;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--vlblue); color: var(--navy);
+  border: 1px solid var(--lblue);
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.ug-steps > li > strong {
+  display: block; font-size: 12.5px; color: var(--navy); margin-bottom: 4px;
+}
+.ug-steps p { font-size: 11.5px; color: var(--grey); line-height: 1.75; margin: 0 0 6px; }
+.ug-steps p:last-child { margin-bottom: 0; }
+.ug-steps code, .ug-faq code {
+  font-family: Consolas, monospace; font-size: 11px;
+  background: var(--bg); padding: 1px 5px; border-radius: 3px; color: var(--navy);
+}
+
+.ug-faq { margin: 0; }
+.ug-faq dt {
+  font-size: 12px; font-weight: 700; color: var(--navy); margin-top: 12px;
+}
+.ug-faq dt:first-child { margin-top: 0; }
+.ug-faq dd {
+  margin: 3px 0 0; font-size: 11.5px; color: var(--grey); line-height: 1.75;
+}
