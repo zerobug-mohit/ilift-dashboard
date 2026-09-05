@@ -127,16 +127,21 @@ gcol <- function(df, map, name) {
   if (is.na(col)) rep(NA, nrow(df)) else df[[col]]
 }
 
+#' NA-safe default, standing in for tidyr::replace_na so this file needs no
+#' dependency beyond dplyr. Same signature, so the ported expressions read as
+#' they do in the legacy script.
+na_or <- function(x, replace = FALSE) { x[is.na(x)] <- replace; x }
+
 #' `x == "yes"`, case-insensitive, NA-safe.
-is_yes <- function(x) tidyr::replace_na(tolower(trimws(as.character(x))) == "yes", FALSE)
+is_yes <- function(x) na_or(tolower(trimws(as.character(x))) == "yes", FALSE)
 
 #' `grepl(pattern, x)`, NA-safe.
 has_txt <- function(x, pattern) {
-  tidyr::replace_na(grepl(pattern, as.character(x), ignore.case = TRUE), FALSE)
+  na_or(grepl(pattern, as.character(x), ignore.case = TRUE), FALSE)
 }
 
 #' `x == value`, NA-safe.
-eq <- function(x, value) tidyr::replace_na(as.character(x) == value, FALSE)
+eq <- function(x, value) na_or(as.character(x) == value, FALSE)
 
 #' Numeric coercion that does not warn on free text.
 num <- function(x) suppressWarnings(as.numeric(as.character(x)))
@@ -198,7 +203,7 @@ compute_logic_flags <- function(df, quiet = FALSE) {
   # is excluded alongside the empty string.
   nonzero_result <- function(x) {
     s <- as.character(x)
-    tidyr::replace_na(!is.na(s) & s != "" & s != "0", FALSE)
+    na_or(!is.na(s) & s != "" & s != "0", FALSE)
   }
   df$`Sputum Tested` <- nonzero_result(g("Sputum Result(Same Day)")) |
                         nonzero_result(g("Sputum Result(Next Day)")) |
@@ -218,14 +223,14 @@ compute_logic_flags <- function(df, quiet = FALSE) {
   # ── [13F] CRD presumptive ─────────────────────────────────────────────────
   mmrc <- g("mMRC Scale")
   df$`CRD presumptive` <- eq(genki, "Other Chest Related Abnormalities") |
-                          tidyr::replace_na(as.character(mmrc) != "0" & !is.na(mmrc) &
+                          na_or(as.character(mmrc) != "0" & !is.na(mmrc) &
                                             trimws(as.character(mmrc)) != "", FALSE)
 
   # ── [13G] TB ──────────────────────────────────────────────────────────────
   df$TB <- eq(df$`MB+`, "Yes") | eq(tb_clin, "Yes")
 
   # ── [13I] Facility Visited ────────────────────────────────────────────────
-  crd_nonzero <- tidyr::replace_na(
+  crd_nonzero <- na_or(
     !is.na(crd) & trimws(as.character(crd)) != "" & as.character(crd) != "0", FALSE
   )
   df$`Facility Visited` <- eq(tb_clin, "Yes") | eq(tb_clin, "No") | crd_nonzero
@@ -276,17 +281,17 @@ compute_logic_flags <- function(df, quiet = FALSE) {
   )
   vulnerable <- Reduce(`|`, lapply(risk_cols, function(c) is_yes(g(c))))
   vulnerable <- vulnerable |
-                tidyr::replace_na(bmi > 0 & bmi < 18.5, FALSE) |
-                tidyr::replace_na(sugar > 140, FALSE)
+                na_or(bmi > 0 & bmi < 18.5, FALSE) |
+                na_or(sugar > 140, FALSE)
   df$`Vulnerable Flag` <- vulnerable
 
   # ── [13P] Eligible for X-ray ──────────────────────────────────────────────
   df$`Eligible for X-ray` <- ifelse(
     vulnerable |
-    tidyr::replace_na(sugar > 140, FALSE) |
-    tidyr::replace_na(bmi >= 9 & bmi < 18.5, FALSE) |
+    na_or(sugar > 140, FALSE) |
+    na_or(bmi >= 9 & bmi < 18.5, FALSE) |
     is_yes(g("Shortness Of Breath")) |
-    tidyr::replace_na(as.character(g("Size Of Lump")) != "0" &
+    na_or(as.character(g("Size Of Lump")) != "0" &
                       !is.na(g("Size Of Lump")), FALSE),
     "Yes", "No"
   )
