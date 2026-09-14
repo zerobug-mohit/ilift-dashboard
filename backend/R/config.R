@@ -31,6 +31,16 @@ CONFIG <- local({
     # ("July 28, 2025 onwards, matches Excel Date Selection start").
     project_start = as.Date(Sys.getenv("ILIFT_PROJECT_START", unset = "2025-07-28")),
 
+    # Districts the programme actually runs in. The Excel reference dashboard
+    # filters to Korba, and the export carries a scattering of records from
+    # elsewhere (Balodabazar-Bhatapara, MCB, Bastar, Jashpur) that inflated
+    # every dashboard figure against the workbook. Empty means no filter.
+    districts = local({
+      raw <- Sys.getenv("ILIFT_DISTRICTS", unset = "Korba")
+      d <- trimws(strsplit(raw, ",")[[1]])
+      d[nzchar(d)]
+    }),
+
     # Phase 1 reads the Excel-computed "Logic sheet" for guaranteed parity.
     # Phase 2 flips this to FALSE to compute flags natively from raw RIS data.
     # Kept as a toggle so the Excel path remains available as a fallback.

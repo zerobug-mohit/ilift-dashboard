@@ -60,6 +60,10 @@ export interface MetaResponse {
     crd_available: boolean
     nikshay_available: boolean
     using_excel_logic: boolean
+    /** Districts the figures are scoped to. Empty means no filter. */
+    districts?: string[]
+    /** Records excluded by that scope, so the filter is visible not hidden. */
+    district_excluded?: { district: string; rows: number }[]
   }
 }
 

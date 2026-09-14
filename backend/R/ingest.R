@@ -323,13 +323,12 @@ ingest_ris <- function() {
   before_filter <- nrow(L)
   L <- L[!is.na(L$camp_date) & L$camp_date >= CONFIG$project_start & !is.na(L$bid), ]
 
-  # Losing every row to the window filter is nearly always a date-format
-  # problem, not an empty export. Saying so here beats "no data loaded" three
-  # steps later, which describes the symptom and not the cause.
+  # Checked here, before the district filter, so the message can only ever be
+  # about the thing that actually emptied the table.
   if (nrow(L) == 0 && before_filter > 0) {
     stop(
       "Every one of the ", format(before_filter, big.mark = ","),
-      " rows was filtered out, so there is nothing to report.\n",
+      " rows fell outside the reporting window, so there is nothing to report.\n",
       "  Dates were read using the format '", parsed$format, "'.\n",
       "  Parsed range: ", format(min(parsed$dates, na.rm = TRUE)), " to ",
       format(max(parsed$dates, na.rm = TRUE)), "\n",
@@ -340,6 +339,49 @@ ingest_ris <- function() {
       "  upload it without opening it.",
       call. = FALSE
     )
+  }
+
+  # Restrict to the programme's districts, as the Excel reference dashboard
+  # does. Without this the export's stray non-Korba records inflated every
+  # figure — 63 rows across four districts put the dashboard 63 above the
+  # workbook on screened, and proportionally above on everything downstream.
+  #
+  # What was excluded is recorded rather than silently dropped: a count that
+  # grows month on month means camps are being logged against the wrong
+  # district upstream, which is worth seeing.
+  district_excluded <- list()
+  if (length(CONFIG$districts) > 0 && nrow(L) > 0) {
+    dist    <- trimws(as.character(fld(L, map, "camp_district")))
+    blank   <- is.na(dist) | dist == ""
+    keep    <- dist %in% CONFIG$districts
+    dropped <- dist[!keep & !blank]
+
+    if (length(dropped) > 0) {
+      tab <- sort(table(dropped), decreasing = TRUE)
+      district_excluded <- lapply(names(tab), function(d) {
+        list(district = d, rows = as.integer(tab[[d]]))
+      })
+      message("[ingest] district filter (", paste(CONFIG$districts, collapse = ", "),
+              "): excluded ", format(length(dropped), big.mark = ","), " row(s)")
+      for (d in names(tab)) message("           - ", d, ": ", tab[[d]])
+    }
+
+    # A blank district is kept: losing a real camp to a data-entry gap is a
+    # different problem from a camp genuinely belonging to another district.
+    before_district <- nrow(L)
+    L <- L[keep | blank, ]
+
+    if (nrow(L) == 0 && before_district > 0) {
+      stop(
+        "The district filter removed every row.\n",
+        "  Configured districts: ", paste(CONFIG$districts, collapse = ", "), "\n",
+        "  Districts in the file: ",
+        paste(utils::head(sort(unique(dist[!blank])), 8), collapse = ", "), "\n\n",
+        "  Set ILIFT_DISTRICTS to match the export, or to an empty string to\n",
+        "  disable the filter entirely.",
+        call. = FALSE
+      )
+    }
   }
 
   # Expert Referral, from the RAW sheet (calc_v2.R:420-430).
@@ -393,7 +435,9 @@ ingest_ris <- function() {
     n_rows      = nrow(L),
     n_bids      = length(unique(L$bid)),
     computed_flags = computed_flags,
-    agreement      = agreement
+    agreement      = agreement,
+    districts         = as.list(CONFIG$districts),
+    district_excluded = district_excluded
   )
 }
 

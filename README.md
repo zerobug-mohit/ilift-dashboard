@@ -122,6 +122,31 @@ formulas no longer have a spreadsheet to be checked against.
 
 ---
 
+## District scope
+
+The programme runs in **Korba**, and the Excel reference dashboard filters to
+it. The RIS export carries a scattering of camps logged against other
+districts — 63 rows across four of them in the September 2026 export — and with
+no filter every dashboard figure sat above the workbook by a corresponding
+amount. That single cause accounted for most of the differences in the
+reconciliation Trisha compiled, including ~48 of the NNS cohorts.
+
+`ILIFT_DISTRICTS` (default `Korba`) scopes the figures. Set it to a
+comma-separated list to widen the scope, or to an empty string to disable the
+filter.
+
+Excluded rows are counted and reported rather than dropped in silence: the
+**How to Update** tab names each district and how many records came from it, and
+ingest logs the same. A count that grows month on month means camps are being
+recorded against the wrong district upstream — which is a data-entry problem
+worth seeing, not something the dashboard should quietly absorb.
+
+A camp with a **blank** district is kept. Losing a real camp to a data-entry gap
+is a different problem from a camp genuinely belonging elsewhere, and dropping
+it would understate the programme.
+
+---
+
 ## Refreshing from Google Drive (no local setup)
 
 The normal way the dashboard gets updated. Whoever maintains the data drops the
@@ -618,6 +643,7 @@ Set in `.Renviron` or the environment:
 | `ILIFT_DATA_DIR` | `backend/data` | Data root |
 | `ILIFT_PORT` | `8000` | API port |
 | `ILIFT_PROJECT_START` | `2025-07-28` | Start of the project window |
+| `ILIFT_DISTRICTS` | `Korba` | Districts the figures are scoped to, comma-separated. Empty string disables the filter |
 | `ILIFT_USE_EXCEL_LOGIC` | `true` | Read the Excel-computed Logic sheet |
 | `ILIFT_VIEWER_PASSWORD` | unset (open) | Shared password to view the dashboard |
 | `ILIFT_ADMIN_TOKEN` | unset (open) | Secret granting upload + refresh |

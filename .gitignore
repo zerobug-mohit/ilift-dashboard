@@ -42,3 +42,11 @@ frontend/tsconfig.tsbuildinfo
 
 # Generated snapshot output (regenerate with: npm run publish)
 publish/
+
+# Internal working documents (definitions, reconciliation notes).
+# This repo is public; these carry internal discussion and are shared
+# by email, not published.
+*.docx
+*.doc
+*.xlsx
+*.xls

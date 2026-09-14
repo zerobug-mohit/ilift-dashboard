@@ -205,7 +205,9 @@ function(req, res) {
         raw_sheet_available = b$ris$raw_ok,
         crd_available       = b$crd$present,
         nikshay_available   = b$nik$present,
-        using_excel_logic   = CONFIG$use_excel_logic_sheet
+        using_excel_logic   = CONFIG$use_excel_logic_sheet,
+                       districts           = as.list(CONFIG$districts),
+                       district_excluded   = bundle$ris$district_excluded
       )
     )
   })

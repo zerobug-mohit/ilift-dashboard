@@ -154,7 +154,9 @@ manifest <- list(
   notes         = list(raw_sheet_available = bundle$ris$raw_ok,
                        crd_available       = bundle$crd$present,
                        nikshay_available   = bundle$nik$present,
-                       using_excel_logic   = CONFIG$use_excel_logic_sheet),
+                       using_excel_logic   = CONFIG$use_excel_logic_sheet,
+                       districts           = as.list(CONFIG$districts),
+                       district_excluded   = bundle$ris$district_excluded),
   # Marks this as a snapshot so the UI can say so instead of implying it is live
   static        = TRUE
 )

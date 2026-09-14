@@ -102,7 +102,14 @@ N_CAMPS    <- 90
 camp_id    <- sprintf("CAMP%03d", seq_len(N_CAMPS))
 camp_mon   <- pick(MONTHS, N_CAMPS)
 camp_date  <- as.Date(paste0(camp_mon, "-", sprintf("%02d", pick(1:28, N_CAMPS))))
-camp_dist  <- pick(c("Korba","Raigarh","Bastar","Surguja","Jashpur"), N_CAMPS)
+# Mirrors the real export: the programme runs in Korba, and a handful of camps
+# arrive logged against other districts. Keeping a few strays here means the
+# district filter has something to exclude, so it is exercised rather than
+# assumed (see test-districts.R).
+camp_dist  <- rep("Korba", N_CAMPS)
+camp_dist[seq_len(5)] <- c("Balodabazar-Bhatapara", "Balodabazar-Bhatapara",
+                           "Manendragarh-Chirmiri-Bharatpur (MCB)", "Bastar", "Jashpur")
+camp_dist  <- sample(camp_dist)
 camp_area  <- pick(c("Mining area","Non-mining area"), N_CAMPS, prob = c(0.22, 0.78))
 camp_class <- pick(c("Tribal","Rural","Urban"), N_CAMPS, prob = c(0.55, 0.35, 0.10))
 camp_lat   <- round(runif(N_CAMPS, 21.0, 23.5), 5)

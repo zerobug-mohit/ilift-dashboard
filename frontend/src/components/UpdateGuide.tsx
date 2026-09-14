@@ -75,6 +75,24 @@ export function UpdateGuide({ meta }: { meta: MetaResponse }) {
               </strong>
             </div>
           </div>
+          {meta.notes?.districts && meta.notes.districts.length > 0 && (
+            <p className="ug-note" style={{ marginBottom: 8 }}>
+              <strong>Scope:</strong> {meta.notes.districts.join(', ')} only, matching
+              the Excel dashboard.
+              {meta.notes.district_excluded && meta.notes.district_excluded.length > 0 && (
+                <>
+                  {' '}This export also contained{' '}
+                  {meta.notes.district_excluded.reduce((n, d) => n + d.rows, 0)} record(s)
+                  logged against other districts, which were excluded:{' '}
+                  {meta.notes.district_excluded
+                    .map((d) => `${d.district} (${d.rows})`)
+                    .join(', ')}
+                  . A count that grows month on month means camps are being
+                  recorded against the wrong district upstream.
+                </>
+              )}
+            </p>
+          )}
           <p className="ug-note">
             The numbers do not change between updates. If you need something more
             recent than the date above, follow the steps below — or ask whoever
