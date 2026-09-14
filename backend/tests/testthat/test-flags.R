@@ -57,11 +57,57 @@ test_that("[13A] a molecular diagnosis basis also counts as MB+", {
   expect_equal(flags_for(DiagnosisBasis = "Truenat")$`MB+`, "Yes")
 })
 
-test_that("[13H] Symptomatic follows Deeptek's Symptoms category", {
-  expect_true(flags_for(Symptoms = "Symptomatic only")$Symptomatic)
-  expect_true(flags_for(Symptoms = "Symptomatic and Vulnerable")$Symptomatic)
-  expect_false(flags_for(Symptoms = "Vulnerable only")$Symptomatic)
-  expect_false(flags_for(Symptoms = "None")$Symptomatic)
+test_that("[13H] Symptomatic is any of the six TB symptoms", {
+  # The operational definitions document defines this as "any symptom of TB",
+  # not Deeptek's own Symptoms category. On the real export the two disagree
+  # for 15 beneficiaries, every one of them someone who reported a symptom
+  # that Deeptek's category missed — so the category understates.
+  expect_true(flags_for(`Cough (in Last 2 Weeks)` = "Yes")$Symptomatic)
+  expect_true(flags_for(`Blood in Sputum (in Last 6 Months)` = "yes")$Symptomatic)
+  expect_true(flags_for(`Loss of Weight (in Last 3 Months)` = "Yes")$Symptomatic)
+  expect_false(flags_for()$Symptomatic)
+
+  # Deeptek's category alone no longer makes someone symptomatic.
+  expect_false(flags_for(Symptoms = "Symptomatic only")$Symptomatic)
+})
+
+test_that("beneficiaries already on TB treatment are out of the TB cascade", {
+  # They were not found by this programme. Counting them inflates both the
+  # presumptive denominator and the notification numerator — it was worth 3 on
+  # TB Notified against the workbook.
+  expect_equal(flags_for(`Cough (in Last 2 Weeks)` = "Yes")$`Eligible for sputum`, "Yes")
+  expect_equal(
+    flags_for(`Cough (in Last 2 Weeks)` = "Yes",
+              `(Common) Currently on TB Treatment` = "Yes")$`Eligible for sputum`,
+    "No"
+  )
+
+  expect_true(flags_for(`Sputum Result(Same Day)` = "Positive")$TB)
+  expect_false(
+    flags_for(`Sputum Result(Same Day)` = "Positive",
+              `(Common) Currently on TB Treatment` = "Yes")$TB
+  )
+})
+
+test_that("an EPTB result stating microbiological confirmation counts as MB+", {
+  # Two such cases carry no positive sputum, so without this they fell to
+  # clinically-diagnosed and the MBC/clinical split sat 2 either side of the
+  # workbook's 73/53.
+  f <- flags_for(EPTB = "Lymph node TB - microbiologically confirmed")
+  expect_equal(f$`MB+`, "Yes")
+
+  # A clinically-diagnosed EPTB case is not microbiologically confirmed.
+  g <- flags_for(EPTB = "Pleural effusion TB - clinically diagnosed")
+  expect_equal(g$`MB+`, "No")
+})
+
+test_that("[13G] TB does not fold in EPTB-only cases", {
+  # TB reads the sputum result rather than MB+, so the one EPTB case with
+  # neither a positive sputum nor a clinician confirmation stays out — which is
+  # what reproduces the workbook's 126.
+  f <- flags_for(EPTB = "Lymph node TB - microbiologically confirmed")
+  expect_equal(f$`MB+`, "Yes")
+  expect_false(f$TB)
 })
 
 test_that("[13G] TB is microbiological OR clinical confirmation", {
@@ -71,14 +117,14 @@ test_that("[13G] TB is microbiological OR clinical confirmation", {
 })
 
 test_that("[13R] sputum eligibility is symptomatic OR a TB-suggestive X-ray", {
-  expect_equal(flags_for(Symptoms = "Symptomatic only")$`Eligible for sputum`, "Yes")
+  expect_equal(flags_for(`Cough (in Last 2 Weeks)` = "Yes")$`Eligible for sputum`, "Yes")
   expect_equal(flags_for(`Genki Edge Result` = "TB Related Abnormalities")$`Eligible for sputum`, "Yes")
   expect_equal(flags_for()$`Eligible for sputum`, "No")
 })
 
 test_that("[13L] the CXR x symptom cross-tabs are mutually exclusive", {
   f <- flags_for(`Genki Edge Result` = "TB Related Abnormalities",
-                 Symptoms = "Symptomatic only")
+                 `Cough (in Last 2 Weeks)` = "Yes")
   expect_true(f$`CXR TB S+`)
   expect_false(f$`CXR TB S-`)
   expect_false(f$`CXR normal S+`)
@@ -116,10 +162,10 @@ test_that("[13J] spirometry is not done when the result is LTFU", {
 })
 
 test_that("[13T] the vulnerability category combines both flags", {
-  expect_equal(flags_for(Symptoms = "Symptomatic only",
+  expect_equal(flags_for(`Cough (in Last 2 Weeks)` = "Yes",
                          `(Common) Diabetes` = "Yes")$Vulnerability,
                "Symptomatic and Vulnerable")
-  expect_equal(flags_for(Symptoms = "Symptomatic only")$Vulnerability, "Symptomatic only")
+  expect_equal(flags_for(`Cough (in Last 2 Weeks)` = "Yes")$Vulnerability, "Symptomatic only")
   expect_equal(flags_for(`(Common) Diabetes` = "Yes")$Vulnerability, "Vulnerable only")
   expect_equal(flags_for()$Vulnerability, "None")
 })

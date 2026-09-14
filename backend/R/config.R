@@ -36,9 +36,17 @@ CONFIG <- local({
     # elsewhere (Balodabazar-Bhatapara, MCB, Bastar, Jashpur) that inflated
     # every dashboard figure against the workbook. Empty means no filter.
     districts = local({
-      raw <- Sys.getenv("ILIFT_DISTRICTS", unset = "Korba")
-      d <- trimws(strsplit(raw, ",")[[1]])
-      d[nzchar(d)]
+      raw <- trimws(Sys.getenv("ILIFT_DISTRICTS", unset = "Korba"))
+      # Windows cannot hold an empty environment variable — setting one to ""
+      # unsets it, so Sys.getenv() returns the default and the filter would
+      # stay on despite an explicit attempt to turn it off. "all" is the
+      # portable way to disable it; "" still works on Linux and in CI.
+      if (raw == "" || tolower(raw) %in% c("all", "none")) {
+        character(0)
+      } else {
+        d <- trimws(strsplit(raw, ",")[[1]])
+        d[nzchar(d)]
+      }
     }),
 
     # Phase 1 reads the Excel-computed "Logic sheet" for guaranteed parity.

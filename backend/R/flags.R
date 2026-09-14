@@ -13,13 +13,28 @@
 # them from the Excel version. Section markers below ([13A] … [13Z]) refer to
 # that file so the two can be diffed.
 #
-# WHAT THIS DOES NOT DO
-# It does not change any definition. Where the legacy port looks odd — comparing
-# against the string "0", say, or treating "Beneficiary ID not present" as a
-# normal X-ray — that oddity is preserved, because the Excel workbook is still
-# the reference the programme reports against. Fixing a definition is a separate
-# decision from removing the manual step, and mixing the two would make a
-# disagreement impossible to attribute.
+# WHAT IT KEEPS, AND WHAT IT CORRECTED
+# Most oddities in the legacy port are preserved deliberately: "Beneficiary ID
+# not present" still counts as a normal X-ray, and comparisons against the
+# string "0" stay, because that is the export's empty marker.
+#
+# Four definitions were corrected against the operational-definitions document
+# and the Excel workbook, after a reconciliation showed the dashboard and the
+# workbook disagreeing:
+#
+#   - Symptomatic is any of the six TB symptoms, not Deeptek's `Symptoms`
+#     category. The category missed 15 beneficiaries who had reported one.
+#   - Beneficiaries already on TB treatment are excluded from the TB cascade.
+#     They were not found by this programme; including them inflated both the
+#     presumptive denominator and the notification numerator.
+#   - MB+ also counts an EPTB result stating microbiological confirmation. Two
+#     such cases carry no positive sputum.
+#   - TB reads the sputum result rather than MB+, so the EPTB-only case is not
+#     folded into notifications.
+#
+# Together these bring ten of the eleven TB-cascade headline indicators to an
+# exact match with the workbook. The eleventh is Sputum Collected; see the note
+# on [13C].
 # ─────────────────────────────────────────────────────────────────────────────
 
 suppressPackageStartupMessages({
@@ -48,6 +63,7 @@ RAW_REQUIRED <- c(
 #' data is merged, and the Deeptek eligibility columns exist purely to be
 #' compared against.
 RAW_OPTIONAL <- c(
+  "(Common) Currently on TB Treatment", "EPTB",
   "DiagnosisBasis", "Chronic Respiratory Diseases (Other)", "Other Risk",
   "Shortness Of Breath", "Size Of Lump", "X-Ray Eligibility", "Sputum Eligibility",
   "Test Type(Same Day)", "Test Type(Next Day)", "Test Type(Other Day)",
@@ -171,25 +187,61 @@ compute_logic_flags <- function(df, quiet = FALSE) {
   # ── [13A] MB+ ─────────────────────────────────────────────────────────────
   # Positive on any of the three sputum timepoints, or a molecular diagnosis
   # basis recorded in Nikshay. Blank — not "No" — where there is no camp record.
-  mb_pos <- has_txt(g("Sputum Result(Same Day)"),  "Positive") |
-            has_txt(g("Sputum Result(Next Day)"),  "Positive") |
-            has_txt(g("Sputum Result(Other Day)"), "Positive") |
-            has_txt(g("DiagnosisBasis"), "Truenat|Trunat|CBNAAT|Xpert")
-  df$`MB+` <- ifelse(has_camp, ifelse(mb_pos, "Yes", "No"), "")
+  sputum_pos <- has_txt(g("Sputum Result(Same Day)"),  "Positive") |
+                has_txt(g("Sputum Result(Next Day)"),  "Positive") |
+                has_txt(g("Sputum Result(Other Day)"), "Positive") |
+                has_txt(g("DiagnosisBasis"), "Truenat|Trunat|CBNAAT|Xpert")
 
-  # ── [13H] Symptomatic ─────────────────────────────────────────────────────
-  # Deeptek's own category, not our recomputed Symptom Flag below.
-  symptomatic <- eq(symptoms, "Symptomatic only") | eq(symptoms, "Symptomatic and Vulnerable")
+  # Extrapulmonary TB carries its own confirmation status in the EPTB column
+  # ("Lymph node TB - microbiologically confirmed"). Two such cases have no
+  # positive sputum, so without this they fell to clinically-diagnosed and the
+  # MBC/clinical split sat 2 either side of the workbook's.
+  eptb_mbc <- has_txt(g("EPTB"), "microbiologically confirmed")
+  mb_pos   <- sputum_pos | eptb_mbc
+  # `on_tb_tx` is defined below with the symptom flags; MB+ is assigned after it.
+
+  # ── [13N] Symptom Flag / [13H] Symptomatic ────────────────────────────────
+  # "Any symptom of TB" per the operational definitions document: cough, chest
+  # pain, fever or night sweats in the last two weeks, weight loss in three
+  # months, blood in sputum in six.
+  #
+  # This replaced Deeptek's own `Symptoms` category, which misses 15
+  # beneficiaries who reported a symptom — every disagreement runs that way,
+  # never the other. The six columns reproduce the workbook's 2,356 exactly.
+  symptom_flag <- is_yes(g("Cough (in Last 2 Weeks)")) |
+                  is_yes(g("Chest Pain (in Last 2 Weeks)")) |
+                  is_yes(g("Night Sweats (in Last 2 Weeks)")) |
+                  is_yes(g("Fever (in Last 2 Weeks)")) |
+                  is_yes(g("Loss of Weight (in Last 3 Months)")) |
+                  is_yes(g("Blood in Sputum (in Last 6 Months)"))
+  df$`Symptom Flag` <- symptom_flag
+
+  symptomatic <- symptom_flag
   df$Symptomatic <- symptomatic
+
+  # Beneficiaries already on TB treatment are excluded from the TB cascade:
+  # they were not found by this programme, and counting them would inflate
+  # both the presumptive denominator and the notification numerator.
+  on_tb_tx <- is_yes(g("(Common) Currently on TB Treatment"))
+
+  # MB+ blank — not "No" — where there is no camp record: "No" asserts a
+  # negative result, blank asserts nothing was recorded.
+  df$`MB+` <- ifelse(has_camp, ifelse(mb_pos & !on_tb_tx, "Yes", "No"), "")
 
   # ── [13B] TB presumptive ──────────────────────────────────────────────────
   df$`TB presumptive` <- ifelse(
     has_camp,
-    eq(genki, "TB Related Abnormalities") | symptomatic,
+    (eq(genki, "TB Related Abnormalities") | symptomatic) & !on_tb_tx,
     ""
   )
 
   # ── [13C] Sputum Collected ────────────────────────────────────────────────
+  # Requires the word "Collected". The workbook instead counts any non-blank
+  # entry, which is 59 beneficiaries higher: those 59 have "-" as their only
+  # entry and no sputum result at any timepoint. A dash reads as "not
+  # recorded", and a collection that produced no result would also distort the
+  # collection-to-testing rate, so this deliberately does not match the
+  # workbook. Raised with the programme team rather than silently aligned.
   df$`Sputum Collected` <- ifelse(
     has_camp,
     has_txt(g("Sputum Collected(Same Day)"),  "Collected") |
@@ -227,7 +279,12 @@ compute_logic_flags <- function(df, quiet = FALSE) {
                                             trimws(as.character(mmrc)) != "", FALSE)
 
   # ── [13G] TB ──────────────────────────────────────────────────────────────
-  df$TB <- eq(df$`MB+`, "Yes") | eq(tb_clin, "Yes")
+  # "TB Diagnosed from Camp": a positive sputum or a clinician's confirmation,
+  # after removing beneficiaries already on TB treatment. Note this reads
+  # sputum_pos rather than MB+, because MB+ now also carries the EPTB
+  # microbiological cases — folding those in here would count the one EPTB
+  # case that has neither sputum nor clinician confirmation.
+  df$TB <- (sputum_pos | eq(tb_clin, "Yes")) & !on_tb_tx
 
   # ── [13I] Facility Visited ────────────────────────────────────────────────
   crd_nonzero <- na_or(
@@ -253,17 +310,6 @@ compute_logic_flags <- function(df, quiet = FALSE) {
   df$`CXR OCA S+`    <- cxr_oca    &  symptomatic
   df$`CXR OCA S-`    <- cxr_oca    & !symptomatic
   df$`CXR normal S-` <- cxr_normal & !symptomatic
-
-  # ── [13N] Symptom Flag ────────────────────────────────────────────────────
-  # Recomputed from the six individual symptoms, as distinct from Deeptek's
-  # Symptoms category used for `Symptomatic` above.
-  symptom_flag <- is_yes(g("Cough (in Last 2 Weeks)")) |
-                  is_yes(g("Chest Pain (in Last 2 Weeks)")) |
-                  is_yes(g("Night Sweats (in Last 2 Weeks)")) |
-                  is_yes(g("Fever (in Last 2 Weeks)")) |
-                  is_yes(g("Loss of Weight (in Last 3 Months)")) |
-                  is_yes(g("Blood in Sputum (in Last 6 Months)"))
-  df$`Symptom Flag` <- symptom_flag
 
   # ── [13O] Vulnerable Flag ─────────────────────────────────────────────────
   bmi   <- num(g("BMI"))
@@ -298,7 +344,7 @@ compute_logic_flags <- function(df, quiet = FALSE) {
 
   # ── [13R] Eligible for sputum ─────────────────────────────────────────────
   df$`Eligible for sputum` <- ifelse(
-    symptomatic | eq(genki, "TB Related Abnormalities"),
+    (symptomatic | eq(genki, "TB Related Abnormalities")) & !on_tb_tx,
     "Yes", "No"
   )
 

@@ -87,17 +87,52 @@ can be diffed.
 absent, it computes them; present, it leaves the file alone. So the Excel route
 still works unchanged, and both can be run against the same data and compared.
 
-### It preserves the definitions, including the odd ones
+### What it keeps, and what it corrected
 
-Nothing was "fixed" in the port. `"Beneficiary ID not present"` still counts as
-a normal X-ray; `BMI > 0` still guards the underweight test so a missing height
-does not read as underweight; comparisons against the string `"0"` are kept
-because that is the export's empty marker.
+Most oddities in the port are preserved deliberately. `"Beneficiary ID not
+present"` still counts as a normal X-ray; `BMI > 0` still guards the underweight
+test so a missing height does not read as underweight; comparisons against the
+string `"0"` stay, because that is the export's empty marker.
 
-Those choices are deliberate. The Excel workbook remains the reference the
-programme reports against, and correcting a definition is a separate decision
-from removing the manual step — doing both at once would make any disagreement
-impossible to attribute.
+Four definitions **were** corrected, against the operational-definitions
+document and a reconciliation against the Excel workbook:
+
+| Definition | Was | Now |
+|---|---|---|
+| Symptomatic | Deeptek's `Symptoms` category | Any of the six TB symptoms |
+| TB cascade | Everyone | Excludes those already on TB treatment |
+| MB+ | Sputum positive only | Also an EPTB result stating microbiological confirmation |
+| TB | Read `MB+` | Reads the sputum result, so EPTB-only cases are not notified |
+
+Deeptek's category missed 15 beneficiaries who had reported a symptom — every
+disagreement ran that way. Beneficiaries already on treatment were not found by
+this programme, and counting them inflated both the presumptive denominator and
+the notification numerator. Two EPTB cases are microbiologically confirmed with
+no positive sputum.
+
+Together these bring **ten of the eleven** TB-cascade headline indicators to an
+exact match with the workbook:
+
+```
+Total Camps          286  =  286        Sputum Tested        2,732  =  2,732
+Total Screened    19,176  = 19,176      MB+ (MBC)               73  =     73
+CXR Taken         17,632  = 17,632      Clinically Dx           53  =     53
+AI-TB Suggestive   2,828  =  2,828      TB Notified            126  =    126
+Symptomatic        2,356  =  2,356      Sputum Collected     3,172 vs  3,231
+Sputum Eligible    4,527  =  4,527
+```
+
+### The one that does not match, on purpose
+
+**Sputum Collected: 3,172 here, 3,231 in the workbook.** The gap is exactly 59
+beneficiaries whose only entry in the collection columns is `-`, and who have no
+sputum result at any of the three timepoints.
+
+This dashboard requires the word "Collected"; the workbook counts any non-blank
+entry. A dash reads as "not recorded", and treating it as a collection that
+produced no result would also distort the collection-to-testing rate. So this is
+left unaligned and raised with the programme team, rather than matched for the
+sake of matching.
 
 ### How you know it is working
 

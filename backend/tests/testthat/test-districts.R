@@ -45,22 +45,31 @@ test_that("a blank district is kept rather than treated as another district", {
   expect_equal(sum(keep | blank), 3)
 })
 
-test_that("an empty ILIFT_DISTRICTS disables the filter", {
-  withr::local_envvar(ILIFT_DISTRICTS = "")
-  d <- local({
-    raw <- Sys.getenv("ILIFT_DISTRICTS", unset = "Korba")
-    x <- trimws(strsplit(raw, ",")[[1]])
-    x[nzchar(x)]
-  })
-  expect_length(d, 0)
+# The parsing lives in CONFIG, which is built once at load. Re-evaluated here
+# so the rules can be tested without reloading the whole config.
+parse_districts <- function() {
+  raw <- trimws(Sys.getenv("ILIFT_DISTRICTS", unset = "Korba"))
+  if (raw == "" || tolower(raw) %in% c("all", "none")) {
+    character(0)
+  } else {
+    d <- trimws(strsplit(raw, ",")[[1]])
+    d[nzchar(d)]
+  }
+}
+
+test_that("ILIFT_DISTRICTS=all disables the filter", {
+  # "all" rather than "": Windows cannot hold an empty environment variable —
+  # assigning "" unsets it, so Sys.getenv() falls back to the default and the
+  # filter would stay on despite an explicit attempt to disable it. The
+  # sentinel works on every platform.
+  withr::local_envvar(ILIFT_DISTRICTS = "all")
+  expect_length(parse_districts(), 0)
+
+  withr::local_envvar(ILIFT_DISTRICTS = "none")
+  expect_length(parse_districts(), 0)
 })
 
 test_that("ILIFT_DISTRICTS accepts a comma-separated list", {
   withr::local_envvar(ILIFT_DISTRICTS = "Korba, Raigarh ,Bastar")
-  d <- local({
-    raw <- Sys.getenv("ILIFT_DISTRICTS", unset = "Korba")
-    x <- trimws(strsplit(raw, ",")[[1]])
-    x[nzchar(x)]
-  })
-  expect_equal(d, c("Korba", "Raigarh", "Bastar"))
+  expect_equal(parse_districts(), c("Korba", "Raigarh", "Bastar"))
 })
