@@ -44,11 +44,37 @@ parse_dates <- function(x, what = "date") {
   # The first component exceeding 12 proves day-first; the second proves
   # month-first. Deciding from the whole column, not row by row, keeps one file
   # on one interpretation.
-  parts <- regmatches(present, regexpr("^(\\d{1,4})[-/](\\d{1,2})[-/](\\d{1,4})", present))
-  first  <- suppressWarnings(as.integer(sub("^(\\d{1,4}).*$", "\\1", parts)))
-  second <- suppressWarnings(as.integer(sub("^\\d{1,4}[-/](\\d{1,2}).*$", "\\1", parts)))
+  # Split each value into its three components so the year can be identified by
+  # width rather than guessed at.
+  rx <- "^([0-9]{1,4})[-/]([0-9]{1,2})[-/]([0-9]{1,4})"
 
-  four_digit_first <- any(nchar(sub("^(\\d{1,4}).*$", "\\1", parts)) == 4, na.rm = TRUE)
+  # regexec rather than sub() with backreferences: the components are read out
+  # of the match object directly, so there is no replacement string to escape.
+  m <- regmatches(present, regexec(rx, present))
+  part <- function(i) {
+    vapply(m, function(x) if (length(x) >= i + 1L) x[i + 1L] else NA_character_,
+           character(1))
+  }
+  t1 <- part(1); t2 <- part(2); t3 <- part(3)
+
+  if (all(is.na(t1))) {
+    stop(what, ": no value looks like a date.\n",
+         "  First few values: ", paste(utils::head(present, 3), collapse = ", "),
+         call. = FALSE)
+  }
+
+  four_digit_first <- any(nchar(t1) == 4)
+
+  # Which component is the year, and how wide is it. This matters more than it
+  # looks: "%y" consumes only two digits, so reading "28-07-2025" with it
+  # yields 2020, while "%Y" reads "28-07-25" as the year 25. Picking by width
+  # rather than by trial avoids both.
+  year_tok   <- if (four_digit_first) t1 else t3
+  year_width <- if (sum(nchar(year_tok) == 4) >= sum(nchar(year_tok) == 2)) 4L else 2L
+  Y <- if (year_width == 4) "%Y" else "%y"
+
+  first  <- suppressWarnings(as.integer(t1))
+  second <- suppressWarnings(as.integer(t2))
   day_first   <- any(first > 12, na.rm = TRUE) && !four_digit_first
   month_first <- any(second > 12, na.rm = TRUE)
 
@@ -62,7 +88,7 @@ parse_dates <- function(x, what = "date") {
   candidates <- if (four_digit_first) {
     c("%Y-%m-%d", "%Y/%m/%d")
   } else if (month_first) {
-    c("%m-%d-%Y", "%m/%d/%Y")
+    c(paste0("%m-%d-", Y), paste0("%m/%d/", Y))
   } else {
     # Day-first either proven, or assumed: these exports are Indian and every
     # ambiguous file seen so far has been day-first. Flagged when unproven.
@@ -72,16 +98,42 @@ parse_dates <- function(x, what = "date") {
         "if these are US-format dates the months and days are transposed"
       )
     }
-    c("%d-%m-%Y", "%d/%m/%Y")
+    c(paste0("%d-%m-", Y), paste0("%d/%m/", Y))
   }
 
-  best <- NULL; best_ok <- -1; best_fmt <- NA_character_
-  for (fmt in c(candidates, "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d")) {
+  # Fallbacks keep the detected year width, so a wrong day/month guess can still
+  # be recovered without reintroducing the %y-eats-four-digits problem.
+  all_formats <- unique(c(
+    candidates,
+    paste0("%d-%m-", Y), paste0("%d/%m/", Y),
+    paste0("%m-%d-", Y), paste0("%m/%d/", Y),
+    "%Y-%m-%d", "%Y/%m/%d"
+  ))
+
+  # Score on dates that are actually plausible, not merely parseable — a format
+  # yielding the year 25 parses every row and is still wrong.
+  plausible <- function(d) !is.na(d) & d >= as.Date("1990-01-01") & d <= as.Date("2100-01-01")
+
+  best <- NULL; best_ok <- -1L; best_fmt <- NA_character_
+  for (fmt in all_formats) {
     d  <- suppressWarnings(as.Date(s, format = fmt))
-    ok <- sum(!is.na(d))
+    ok <- sum(plausible(d))
     if (ok > best_ok) { best <- d; best_ok <- ok; best_fmt <- fmt }
     if (ok == length(present)) break
   }
+
+  if (best_ok == 0) {
+    stop(what, ": none of the formats tried produced a usable date.
+",
+         "  First few values: ", paste(utils::head(present, 3), collapse = ", "), "
+",
+         "  Tried: ", paste(all_formats, collapse = ", "),
+         call. = FALSE)
+  }
+
+  # An implausible row is dropped rather than carried: a year-25 date would
+  # silently fall outside every window anyway.
+  best[!plausible(best)] <- NA
 
   failed <- sum(!is.na(s) & is.na(best))
   if (failed > 0) {
@@ -90,6 +142,8 @@ parse_dates <- function(x, what = "date") {
             " values could not be read as dates (format ", best_fmt, ")")
   }
   if (!is.null(note)) message("[ingest] ", what, ": ", note)
+  message("[ingest] ", what, ": read as ", best_fmt, " (",
+          format(min(best, na.rm = TRUE)), " to ", format(max(best, na.rm = TRUE)), ")")
 
   list(dates = best, format = best_fmt, note = note)
 }
